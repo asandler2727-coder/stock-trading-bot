@@ -206,6 +206,8 @@ Dispatch 2 independent Opus reviewers against `engine.py`+tests: hunt lookahead 
 
 ## Phase B — Strategies (12 parallel tasks, disjoint files)
 
+> **Sizing scope (Phase B–C):** Gate evaluation uses R-multiples only (`profit_factor`, `win_rate`, `n`). Fixed-fraction dollar sizing, floored shares, concurrent-position caps, and portfolio heat are intentionally out of scope for the gate — R-multiples are sizing-independent and sufficient to rank strategies. The `equity_curve(risk_frac=0.01)` function approximates the 1%-risk compounded curve correctly for drawdown reporting. Full position-sizing and heat-cap enforcement is a Phase D+ live-trading concern.
+
 Every strategy: create `src/stockslab/strategies/<name>.py` + `tests/test_strat_<name>.py`. Each must `@register`, set `timeframe`/`universe`, and pass: (a) causality test — `generate(df[:k])` rows match `generate(df)` rows up to k-1 on random synthetic OHLC; (b) at least one synthetic-scenario test proving entries fire exactly when rules say. Commit per strategy: `feat: strategy <name>`.
 
 Exact rules (params in `self.params`, defaults shown — these are the ±20% sensitivity knobs):

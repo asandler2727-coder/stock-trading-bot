@@ -184,6 +184,27 @@ class TestValidate:
         with pytest.raises(ValueError, match="column"):
             validate(df)
 
+    def test_non_float64_dtype_raises(self):
+        """Columns must be float64; int64 (e.g. un-cast volume) should raise."""
+        from stockslab.data import validate
+        df = _make_ohlcv()
+        df["volume"] = df["volume"].astype("int64")
+        with pytest.raises(ValueError, match="float64"):
+            validate(df)
+
+    def test_wrong_tz_raises(self):
+        """tz-aware index with UTC should raise — only America/New_York is valid."""
+        from stockslab.data import validate
+        df = _make_ohlcv(tz="UTC")
+        with pytest.raises(ValueError, match="America/New_York"):
+            validate(df)
+
+    def test_ny_tz_passes(self):
+        """tz-aware index with America/New_York is valid (intraday contract)."""
+        from stockslab.data import validate
+        df = _make_ohlcv(tz="America/New_York")
+        validate(df)  # must not raise
+
 
 # ---------------------------------------------------------------------------
 # splits() tests

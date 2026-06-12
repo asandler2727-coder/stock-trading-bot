@@ -69,8 +69,9 @@ These rules are the correctness core; engine tests enforce each one:
 
 ## Data
 
-- **Source:** yfinance (no API key). Backoff + local parquet cache; Stooq as a
-  daily-bars fallback if Yahoo rate-limits.
+- **Source:** yfinance (no API key). Backoff + local parquet cache. (Stooq
+  fallback deferred — not implemented; yfinance with 3-retry backoff is
+  sufficient for research use.)
 - **Universe:**
   - ETFs (no survivorship bias): SPY, QQQ, IWM, DIA, XLK, XLF, XLE, XLV, XLI, XLP,
     XLU, XLY, XLB, XLRE, XLC, GLD, SLV, TLT, HYG, EEM, EFA;
@@ -147,7 +148,7 @@ Total ≈ 18–22 agents. Approved in session 2026-06-12.
 ## Risks
 
 - **Survivorship bias** in the stock list (mitigated: ETF-heavy conclusions, documented).
-- **yfinance reliability** (mitigated: cache, backoff, Stooq fallback for daily).
+- **yfinance reliability** (mitigated: cache, backoff; Stooq fallback deferred).
 - **Thin intraday history** — intraday findings are provisional by construction.
 - **Regime concentration** — 2010–2021 IS is mostly bull market; OOS includes 2022
   bear and 2024–2026, which is exactly why the OOS gate exists.

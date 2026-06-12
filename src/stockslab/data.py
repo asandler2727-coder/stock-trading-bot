@@ -28,6 +28,8 @@ import logging
 from typing import Optional
 
 import numpy as np
+
+import numpy as np
 import pandas as pd
 
 log = logging.getLogger(__name__)
@@ -147,6 +149,20 @@ def validate(df: pd.DataFrame) -> None:
     # No NaN rows
     if df[list(_REQUIRED_COLS)].isnull().any(axis=None):
         raise ValueError("DataFrame contains NaN values in OHLCV columns")
+
+    # Column dtypes: all OHLCV columns must be float64
+    for col in _REQUIRED_COLS:
+        if df[col].dtype != np.float64:
+            raise ValueError(
+                f"column '{col}' has dtype {df[col].dtype!r}, expected float64"
+            )
+
+    # Timezone: if tz-aware, must be America/New_York (UTC or other tz would
+    # break session_vwap, session_exit, and IS/OOS slicing)
+    if df.index.tz is not None and str(df.index.tz) != "America/New_York":
+        raise ValueError(
+            f"tz-aware index must use America/New_York, got {df.index.tz!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -352,12 +368,17 @@ def load_panel(
 # We express intraday splits as date strings rather than fixed row counts
 # so downstream code can use .loc[is_slice] on DatetimeIndex frames.
 _SPLITS: dict[str, tuple[slice, slice]] = {
+    # Daily: intentionally fixed historical window (survivorship-bias known,
+    # dates won't change between runs).
     "1d": (
         slice("2010-01-01", "2021-12-31"),
         slice("2022-01-01", "2026-06-01"),
     ),
+    # NOTE: intraday dates are anchored to a 2026-06-12 fetch window.
+    # If data is re-fetched significantly later these boundaries should be
+    # recomputed as (fetch_end - 730d) + 70/30 split.
     "1h": (
-        # 730-day window: trailing from today (2026-06-12); 70%/30% split
+        # 730-day window: trailing from 2026-06-12; 70%/30% split
         # IS = 2024-01-05 → 2025-09-02 (~511 days); OOS = 2025-09-03 → 2026-06-12
         slice("2024-01-05", "2025-09-02"),
         slice("2025-09-03", "2026-06-12"),
