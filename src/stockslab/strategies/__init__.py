@@ -38,5 +38,8 @@ def load_all() -> dict:
     return REGISTRY
 
 
-# Discover on package import.
-load_all()
+# NOTE: discovery is NOT triggered at import time. Callers (the runner scripts)
+# must call load_all() explicitly. This keeps `from stockslab.strategies.base
+# import ...` cheap and — critically — avoids importing every sibling module
+# while strategies are still being authored in parallel (a half-written sibling
+# would otherwise break an unrelated module's import).
