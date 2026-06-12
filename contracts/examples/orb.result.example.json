@@ -1,0 +1,242 @@
+{
+  "result_contract_version": "0.2.0",
+  "run_id": "orb_IS_5b5ec43_20260612T140500Z",
+  "generated_at": "2026-06-12T14:05:00Z",
+  "repo_commit": "5b5ec432d1208acbf0b07bdb819928772a72cdc8",
+  "payload_type": "backtest_result",
+  "strategy": {
+    "name": "orb",
+    "version": null,
+    "kind": "signal",
+    "timeframe": "1h",
+    "universe_label": "all",
+    "live_capable": false,
+    "params": { "atr_n": 14 },
+    "config": {
+      "target_r": 2.0,
+      "trail_atr_mult": null,
+      "time_stop_bars": null,
+      "session_exit": true,
+      "entry_at_open": false
+    }
+  },
+  "symbols": ["SPY", "QQQ"],
+  "data": {
+    "source": "yfinance",
+    "adjustment": "split_dividend_adjusted",
+    "interval": "1h",
+    "timezone": "America/New_York",
+    "range": { "start": "2024-01-05", "end": "2025-09-02" },
+    "split_label": "IS",
+    "live_price_required_for_sizing": true,
+    "bars_per_symbol": { "SPY": 4810, "QQQ": 4810 }
+  },
+  "sim_assumptions": {
+    "engine_semantics_version": "1.0",
+    "slippage_model": {
+      "type": "per_side_bps_by_tier",
+      "tiers_bps": { "1": 1, "2": 3, "3": 5 },
+      "applied": "both_sides",
+      "symbol_tier": { "SPY": 1, "QQQ": 1 }
+    },
+    "commission_model": { "type": "none", "per_trade": 0 },
+    "fill_model": {
+      "semantics_version": "1.0",
+      "entry": "next_bar_open",
+      "entry_ref": "open[t+1]",
+      "exit_priority": ["gap_stop", "stop", "target", "signal", "time", "session", "eod"],
+      "stop_before_target": true,
+      "gap_through_stop_fills_at": "open",
+      "one_position_per_symbol": true,
+      "pyramiding": false
+    },
+    "sizing_model": {
+      "type": "fixed_unit_R",
+      "risk_per_trade_R": 1.0,
+      "equity_curve_risk_frac": 0.01,
+      "dollar_sizing": "not_modeled"
+    },
+    "calendar_assumptions": {
+      "trading_calendar": "yfinance_native",
+      "session_boundary": "calendar_day_change_in_index"
+    }
+  },
+  "signals": [
+    {
+      "signal_id": "orb:SPY:2024-03-05T10:30:00-05:00:entry",
+      "symbol": "SPY",
+      "bar_time": "2024-03-05T10:30:00-05:00",
+      "data_available_at": "2024-03-05T11:30:00-05:00",
+      "signal_generated_at": "2024-03-05T11:30:00-05:00",
+      "decision_valid_from": "2024-03-05T11:30:00-05:00",
+      "decision_valid_until": "2024-03-05T12:30:00-05:00",
+      "signal_type": "entry",
+      "side": "long",
+      "engine_signal_status": "filled_in_backtest",
+      "engine_skip_reason": null,
+      "score": null,
+      "score_name": null,
+      "score_components": null,
+      "stop_dist": 1.83,
+      "required_inputs": ["session_opening_range_high", "session_opening_range_low", "atr_14"],
+      "data_quality_flags": null
+    },
+    {
+      "signal_id": "orb:QQQ:2024-03-05T11:30:00-05:00:entry",
+      "symbol": "QQQ",
+      "bar_time": "2024-03-05T11:30:00-05:00",
+      "data_available_at": "2024-03-05T12:30:00-05:00",
+      "signal_generated_at": "2024-03-05T12:30:00-05:00",
+      "decision_valid_from": "2024-03-05T12:30:00-05:00",
+      "decision_valid_until": "2024-03-05T13:30:00-05:00",
+      "signal_type": "entry",
+      "side": "long",
+      "engine_signal_status": "skipped_in_backtest",
+      "engine_skip_reason": "already_in_position",
+      "score": null,
+      "score_name": null,
+      "score_components": null,
+      "stop_dist": 2.41,
+      "required_inputs": ["session_opening_range_high", "session_opening_range_low", "atr_14"],
+      "data_quality_flags": null
+    },
+    {
+      "signal_id": "orb:SPY:2024-07-09T10:30:00-04:00:entry",
+      "symbol": "SPY",
+      "bar_time": "2024-07-09T10:30:00-04:00",
+      "data_available_at": "2024-07-09T11:30:00-04:00",
+      "signal_generated_at": "2024-07-09T11:30:00-04:00",
+      "decision_valid_from": "2024-07-09T11:30:00-04:00",
+      "decision_valid_until": "2024-07-09T12:30:00-04:00",
+      "signal_type": "entry",
+      "side": "long",
+      "engine_signal_status": "filled_in_backtest",
+      "engine_skip_reason": null,
+      "score": null,
+      "score_name": null,
+      "score_components": null,
+      "stop_dist": 1.55,
+      "required_inputs": ["session_opening_range_high", "session_opening_range_low", "atr_14"],
+      "data_quality_flags": null
+    }
+  ],
+  "trades": [
+    {
+      "symbol": "SPY",
+      "source_signal_id": "orb:SPY:2024-03-05T10:30:00-05:00:entry",
+      "entry_date": "2024-03-05T11:30:00-05:00",
+      "exit_date": "2024-03-05T15:30:00-05:00",
+      "entry": 512.40,
+      "exit": 514.85,
+      "shares": 1.0,
+      "r_multiple": 1.34,
+      "pct_return": 0.0048,
+      "exit_reason": "session"
+    },
+    {
+      "symbol": "SPY",
+      "source_signal_id": "orb:SPY:2024-07-09T10:30:00-04:00:entry",
+      "entry_date": "2024-07-09T11:30:00-04:00",
+      "exit_date": "2024-07-09T13:30:00-04:00",
+      "entry": 548.20,
+      "exit": 546.65,
+      "shares": 1.0,
+      "r_multiple": -1.00,
+      "pct_return": -0.0028,
+      "exit_reason": "stop"
+    }
+  ],
+  "empirical_risk_stats": {
+    "trade_count": 642,
+    "win_rate": 0.41,
+    "expectancy_R": 0.08,
+    "profit_factor": 1.22,
+    "profit_factor_is_infinite": false,
+    "avg_winner_R": 1.74,
+    "avg_loser_R": -0.74,
+    "worst_trade_R": -1.02,
+    "best_trade_R": 2.0,
+    "worst_trade_pct": -0.018,
+    "best_trade_pct": 0.036,
+    "max_drawdown_frac": 0.11,
+    "median_hold_days": 0,
+    "return_distribution_R": {
+      "min": -1.02,
+      "p05": -1.0,
+      "p25": -0.78,
+      "median": -0.55,
+      "p75": 0.9,
+      "p95": 2.0,
+      "max": 2.0,
+      "mean": 0.08,
+      "std": 1.05
+    },
+    "exit_reason_counts": { "target": 121, "stop": 388, "session": 130, "eod": 3 }
+  },
+  "per_symbol_stats": {
+    "SPY": {
+      "trade_count": 410,
+      "win_rate": 0.42,
+      "expectancy_R": 0.10,
+      "profit_factor": 1.27,
+      "profit_factor_is_infinite": false
+    },
+    "QQQ": {
+      "trade_count": 232,
+      "win_rate": 0.39,
+      "expectancy_R": 0.05,
+      "profit_factor": 1.14,
+      "profit_factor_is_infinite": false
+    }
+  },
+  "research_status": {
+    "phase1_gate": {
+      "evaluated": true,
+      "passed": false,
+      "reasons": ["pf 1.2200 <= 1.3 (required pf > 1.3)"]
+    },
+    "phase2_oos": {
+      "evaluated": false,
+      "passed": null,
+      "reasons": []
+    },
+    "note": "Gate outcomes are research-promotion status, NOT trading authorization. This run is the IS split; the OOS gate is evaluated on the OOS run."
+  },
+  "validation_refs": null,
+  "data_quality": {
+    "status": "warning",
+    "flags": ["adjusted_prices", "thin_intraday_history", "intraday_bar_label_unconfirmed"]
+  },
+  "caveats": [
+    {
+      "code": "example_illustrative",
+      "severity": "low",
+      "message": "Synthetic illustrative values for contract demonstration — not a real backtest run."
+    },
+    {
+      "code": "prices_adjusted",
+      "severity": "high",
+      "message": "OHLC are split/dividend-adjusted (yfinance auto_adjust=True). Signal prices and stop_dist live in adjusted-price space; data.live_price_required_for_sizing=true. A copilot MUST re-fetch raw quotes before sizing or ordering."
+    },
+    {
+      "code": "intraday_bar_label_convention",
+      "severity": "high",
+      "message": "data_available_at assumes yfinance 1h bars are labeled by bar START (close = label + 1h). If labeled by END, data_available_at and decision_valid_from shift one interval earlier. Confirm against the data layer before trusting intraday no-lookahead margins."
+    },
+    {
+      "code": "thin_intraday_history",
+      "severity": "medium",
+      "message": "1h history is limited to ~730 trailing days by the free data source; intraday findings are provisional."
+    },
+    {
+      "code": "survivorship_bias_stocks",
+      "severity": "medium",
+      "message": "Stock universe is current constituents tested on history. ETF symbols (SPY, QQQ) carry no survivorship bias; stock-symbol results do."
+    },
+    {
+      "code": "long_only_engine",
+      "severity": "low",
+      "message": "Engine is long-only in v0; signal.side is always 'long'."
+    }
+  ]
+}

@@ -18,6 +18,12 @@ def run_strat(strat, slippage_mult=1.0):
     if isinstance(strat, RotationStrategy) and "SPY" not in syms:
         syms.append("SPY")
 
+    valid_syms = []
+    for s in syms:
+        if Path(f"data/{strat.timeframe}/{s}.parquet").exists():
+            valid_syms.append(s)
+    syms = valid_syms
+
     try:
         panel = data.load_panel(syms, strat.timeframe)
     except Exception as e:

@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stockslab.local/contracts/result_contract/0.2.0",
+  "title": "Stockslab Strategy-Result Contract (v0.2.0)",
+  "description": "Descriptive, point-in-time output of one backtest run (and, reserved, a future live-signals payload). Engine lane PRODUCES this; the trading-copilot lane CONSUMES it. Carries facts + point-in-time provenance + empirical risk + data-quality flags. Carries NO prescriptive risk policy, account/broker state, dollar sizing, or execution instructions — those live only in the copilot's rules layer. See result_contract_v0.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result_contract_version",
+    "run_id",
+    "generated_at",
+    "repo_commit",
+    "payload_type",
+    "strategy",
+    "symbols",
+    "data",
+    "sim_assumptions",
+    "signals",
+    "data_quality",
+    "caveats"
+  ],
+  "$comment": "allOf holds: (1) the engine/copilot boundary guard; (2) payload_type discriminator — backtest_result requires empirical_risk_stats, live_signals requires validation_refs; (3) live-readiness — when strategy.live_capable is true, every signal must declare non-empty required_inputs.",
+  "allOf": [
+    {
+      "not": {
+        "anyOf": [
+          { "required": ["max_daily_loss"] },
+          { "required": ["max_loss_per_trade"] },
+          { "required": ["max_position_size"] },
+          { "required": ["account_risk_policy"] },
+          { "required": ["risk_limits"] },
+          { "required": ["account_id"] },
+          { "required": ["account_state"] },
+          { "required": ["account_equity"] },
+          { "required": ["buying_power"] },
+          { "required": ["broker"] },
+          { "required": ["broker_state"] },
+          { "required": ["credentials"] },
+          { "required": ["api_key"] },
+          { "required": ["live_positions"] },
+          { "required": ["open_positions"] },
+          { "required": ["orders"] },
+          { "required": ["execution_instructions"] },
+          { "required": ["order_instructions"] }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": ["payload_type"],
+        "properties": { "payload_type": { "const": "backtest_result" } }
+      },
+      "then": { "required": ["empirical_risk_stats"] }
+    },
+    {
+      "if": {
+        "required": ["payload_type"],
+        "properties": { "payload_type": { "const": "live_signals" } }
+      },
+      "then": { "required": ["validation_refs"] }
+    },
+    {
+      "if": {
+        "required": ["strategy"],
+        "properties": {
+          "strategy": {
+            "required": ["live_capable"],
+            "properties": { "live_capable": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "signals": {
+            "items": {
+              "required": ["required_inputs"],
+              "properties": {
+                "required_inputs": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "result_contract_version": {
+      "type": "string",
+      "pattern": "^0\\.2\\.\\d+$",
+      "description": "SemVer of THIS contract (not the strategy, not the engine). v0.2.x. A MAJOR bump signals a breaking change a consumer must handle."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique id for this run, e.g. '<strategy>_<split>_<commit8>_<UTCstamp>'. Provenance only; never a trading identifier."
+    },
+    "generated_at": { "$ref": "#/$defs/timestamp", "description": "Wall-clock instant this result was emitted. Provenance, NOT a trading time." },
+    "repo_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "git SHA of the engine code that produced this run. Pins fill model, indicators, strategy logic."
+    },
+    "payload_type": {
+      "enum": ["backtest_result", "live_signals"],
+      "description": "Discriminator. v0.2 engine emits only 'backtest_result'. 'live_signals' is RESERVED for a future live/scanner generator (carries validation_refs instead of empirical_risk_stats)."
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "kind", "timeframe", "universe_label", "live_capable", "params", "config"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": ["string", "null"], "description": "Strategy logic version if declared, else null. Interim pin = repo_commit + params." },
+        "kind": { "enum": ["signal", "rotation"] },
+        "timeframe": { "enum": ["1d", "1h", "5m"] },
+        "universe_label": { "type": "string", "description": "Declared universe filter; RESOLVED symbols are in top-level `symbols`." },
+        "live_capable": {
+          "type": "boolean",
+          "description": "Descriptive: are this strategy's inputs available/fresh enough to run live? When true, every signal MUST declare non-empty required_inputs (enforced). Current strategies default false until live-readiness is confirmed."
+        },
+        "params": { "type": "object", "additionalProperties": true, "description": "Strategy tunables (the sensitivity knobs)." },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target_r", "trail_atr_mult", "time_stop_bars", "session_exit", "entry_at_open"],
+          "properties": {
+            "target_r": { "type": ["number", "null"] },
+            "trail_atr_mult": { "type": ["number", "null"] },
+            "time_stop_bars": { "type": ["integer", "null"] },
+            "session_exit": { "type": "boolean" },
+            "entry_at_open": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "symbols": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Resolved symbols actually evaluated in this run." },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "adjustment", "interval", "timezone", "range", "split_label", "live_price_required_for_sizing"],
+      "properties": {
+        "source": { "type": "string" },
+        "adjustment": {
+          "enum": ["split_dividend_adjusted", "split_adjusted", "raw"],
+          "description": "yfinance auto_adjust=True => 'split_dividend_adjusted'. Adjusted prices are NOT raw live order prices."
+        },
+        "interval": { "enum": ["1d", "1h", "5m"] },
+        "timezone": { "type": "string", "description": "'America/New_York' (intraday) or 'naive' (daily). Independent of the explicit-offset timestamps in `signals`." },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "string" },
+            "end": { "type": "string" }
+          }
+        },
+        "split_label": { "enum": ["IS", "OOS", "full"] },
+        "live_price_required_for_sizing": {
+          "type": "boolean",
+          "description": "Machine-readable enforcement of the prices_adjusted caveat. True whenever adjustment != 'raw'. The copilot's size_calculator MUST re-fetch a raw live quote before computing any dollar size — it may NOT size from the adjusted prices/stop_dist in this contract."
+        },
+        "bars_per_symbol": { "type": ["object", "null"], "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "sim_assumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine_semantics_version", "slippage_model", "commission_model", "fill_model", "sizing_model", "calendar_assumptions"],
+      "properties": {
+        "engine_semantics_version": { "type": "string", "description": "Version of the engine's frozen fill/anti-lookahead semantics (engine.py docstring)." },
+        "slippage_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "tiers_bps", "applied", "symbol_tier"],
+          "properties": {
+            "type": { "const": "per_side_bps_by_tier" },
+            "tiers_bps": { "type": "object", "additionalProperties": { "type": "number" } },
+            "applied": { "const": "both_sides" },
+            "symbol_tier": { "type": "object", "additionalProperties": { "type": "integer", "enum": [1, 2, 3] } }
+          }
+        },
+        "commission_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "per_trade"],
+          "properties": {
+            "type": { "enum": ["none", "per_trade_flat", "per_share"] },
+            "per_trade": { "type": "number" }
+          }
+        },
+        "fill_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["semantics_version", "entry", "entry_ref", "exit_priority", "stop_before_target", "gap_through_stop_fills_at", "one_position_per_symbol", "pyramiding"],
+          "properties": {
+            "semantics_version": { "type": "string" },
+            "entry": { "enum": ["next_bar_open", "same_bar_open"] },
+            "entry_ref": { "type": "string" },
+            "exit_priority": { "type": "array", "items": { "enum": ["gap_stop", "stop", "target", "signal", "time", "session", "rotation", "eod"] } },
+            "stop_before_target": { "type": "boolean" },
+            "gap_through_stop_fills_at": { "enum": ["open", "stop"] },
+            "one_position_per_symbol": { "type": "boolean" },
+            "pyramiding": { "type": "boolean" }
+          }
+        },
+        "sizing_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "risk_per_trade_R", "equity_curve_risk_frac", "dollar_sizing"],
+          "description": "DESCRIPTIVE simulation sizing ONLY. None of these are account sizing. The copilot MUST ignore risk_per_trade_R and equity_curve_risk_frac for dollar sizing and compute real size from rules.yaml + a live quote.",
+          "properties": {
+            "type": { "const": "fixed_unit_R" },
+            "risk_per_trade_R": { "type": "number", "description": "Engine risks one fixed unit (1R) per trade. NOT account sizing — do not interpret as a dollar or percent-of-account amount." },
+            "equity_curve_risk_frac": { "type": "number", "description": "Fixed fraction used ONLY to render the equity curve for drawdown reporting. NOT a position-sizing instruction." },
+            "dollar_sizing": { "const": "not_modeled", "description": "The engine does NOT compute dollar position sizes. Dollar sizing is a copilot-lane concern." }
+          }
+        },
+        "calendar_assumptions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["trading_calendar", "session_boundary"],
+          "properties": {
+            "trading_calendar": { "type": "string" },
+            "session_boundary": { "type": "string" }
+          }
+        }
+      }
+    },
+    "signals": {
+      "type": "array",
+      "description": "The strategy's point-in-time decision surface — one record per emitted signal. NOT realized trades (see `trades`). A single signal object is the atomic unit a live copilot evaluates; backtest = many historical signals, live = today's signal, identical schema.",
+      "items": { "$ref": "#/$defs/signal" }
+    },
+    "trades": {
+      "type": ["array", "null"],
+      "description": "OPTIONAL realized-fill ledger. Prefer emitting on backtest/research runs (review.py compares user behavior vs realized outcomes); not needed to approve one live signal.",
+      "items": { "$ref": "#/$defs/trade" }
+    },
+    "empirical_risk_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "DESCRIPTIVE realized risk of this run (aggregate). A copilot may READ these to INFORM its prescriptive limits; it must NOT treat any as a limit. Required for payload_type=backtest_result.",
+      "required": ["trade_count", "win_rate", "expectancy_R", "profit_factor", "profit_factor_is_infinite", "max_drawdown_frac", "median_hold_days", "exit_reason_counts"],
+      "properties": {
+        "trade_count": { "type": "integer", "minimum": 0 },
+        "win_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "expectancy_R": { "type": "number" },
+        "profit_factor": { "type": ["number", "null"], "description": "null when infinite (no losers) — JSON has no Infinity." },
+        "profit_factor_is_infinite": { "type": "boolean" },
+        "avg_winner_R": { "type": ["number", "null"] },
+        "avg_loser_R": { "type": ["number", "null"] },
+        "worst_trade_R": { "type": ["number", "null"] },
+        "best_trade_R": { "type": ["number", "null"] },
+        "worst_trade_pct": { "type": ["number", "null"] },
+        "best_trade_pct": { "type": ["number", "null"] },
+        "max_drawdown_frac": { "type": "number", "minimum": 0 },
+        "median_hold_days": { "type": "number", "minimum": 0 },
+        "return_distribution_R": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "number" },
+            "p05": { "type": "number" },
+            "p25": { "type": "number" },
+            "median": { "type": "number" },
+            "p75": { "type": "number" },
+            "p95": { "type": "number" },
+            "max": { "type": "number" },
+            "mean": { "type": "number" },
+            "std": { "type": "number" }
+          }
+        },
+        "exit_reason_counts": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
+    "per_symbol_stats": {
+      "type": ["object", "null"],
+      "description": "OPTIONAL per-symbol historical validation, so a scanner can answer 'has this strategy worked on THIS symbol?'. symbol -> stats subset.",
+      "additionalProperties": { "$ref": "#/$defs/symbol_stat" }
+    },
+    "research_status": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "DESCRIPTIVE research-promotion gate outcomes. NEVER trade authorization. A gate not applicable to this split has evaluated=false, passed=null.",
+      "properties": {
+        "phase1_gate": { "$ref": "#/$defs/gate_result" },
+        "phase2_oos": { "$ref": "#/$defs/gate_result" },
+        "note": { "type": "string" }
+      }
+    },
+    "validation_refs": {
+      "type": ["array", "null"],
+      "description": "Back-references to the historical run(s) that justify treating a strategy as eligible. Required for payload_type=live_signals; optional/ null for backtest_result.",
+      "items": { "$ref": "#/$defs/validation_ref" }
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Run-level data-quality summary the copilot can gate on WITHOUT parsing caveat prose. status='blocked' means do-not-trust.",
+      "required": ["status", "flags"],
+      "properties": {
+        "status": { "enum": ["ok", "warning", "blocked"] },
+        "flags": { "type": "array", "items": { "type": "string" }, "description": "Stable machine keys, e.g. 'adjusted_prices','thin_intraday_history','low_liquidity_tier','intraday_bar_label_unconfirmed'." }
+      }
+    },
+    "caveats": { "type": "array", "items": { "$ref": "#/$defs/caveat" } }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([.,]\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "description": "ISO-8601 instant WITH explicit timezone (offset or Z). Naive/ambiguous timestamps are rejected by design — they are how lookahead bugs hide."
+    },
+    "nullable_timestamp": {
+      "oneOf": [ { "$ref": "#/$defs/timestamp" }, { "type": "null" } ]
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signal_id", "symbol", "bar_time", "data_available_at", "signal_generated_at", "decision_valid_from", "signal_type", "side", "engine_signal_status", "stop_dist"],
+      "properties": {
+        "signal_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable identity for this signal. Recommend deterministic '<strategy>:<symbol>:<bar_time>:<signal_type>' so the same signal in a backtest and live carries the same id. journal.csv/review.py link a taken trade back to one exact signal via this."
+        },
+        "symbol": { "type": "string" },
+        "bar_time": { "$ref": "#/$defs/timestamp", "description": "DatetimeIndex label of the signal bar t (tz-explicit)." },
+        "data_available_at": { "$ref": "#/$defs/timestamp", "description": "Instant bar t's OHLC is fully observed (bar close). SAFETY INVARIANT: data_available_at <= decision_valid_from." },
+        "signal_generated_at": { "$ref": "#/$defs/timestamp", "description": "When the signal was computed. >= data_available_at and <= decision_valid_from." },
+        "decision_valid_from": { "$ref": "#/$defs/timestamp", "description": "Earliest actionable instant = engine fill reference (open[t+1], or open[t] if entry_at_open)." },
+        "decision_valid_until": { "$ref": "#/$defs/nullable_timestamp", "description": "Freshness ceiling; null = no engine TTL (copilot owns staleness)." },
+        "signal_type": { "enum": ["entry", "exit"] },
+        "side": { "enum": ["long", "short"], "description": "Engine is long-only in v0; always 'long'. 'short' reserved." },
+        "engine_signal_status": {
+          "enum": ["candidate", "filled_in_backtest", "skipped_in_backtest", "exit_only"],
+          "description": "DESCRIPTIVE engine behavior, NOT authorization. backtest_result uses filled_in_backtest | skipped_in_backtest | exit_only. live_signals uses 'candidate' for a fresh actionable signal. Lets pre_trade_check distinguish a real entry candidate from a signal the engine would not have acted on."
+        },
+        "engine_skip_reason": {
+          "type": ["string", "null"],
+          "description": "Why the engine did not act, when status=skipped_in_backtest (e.g. 'already_in_position','invalid_stop_dist','no_next_bar'). null otherwise."
+        },
+        "score": {
+          "oneOf": [ { "type": "null" }, { "type": "number", "minimum": 0, "maximum": 1 } ],
+          "description": "OPTIONAL normalized setup strength in [0,1], higher = stronger. null unless the strategy can HONESTLY produce one (a fake score is worse than null). A descriptive ranking hint for scanner throttle/ordering — NEVER a buy/authorization signal."
+        },
+        "score_name": { "type": ["string", "null"], "description": "What the score measures, when score is non-null." },
+        "score_components": { "type": ["object", "null"], "description": "Optional breakdown behind the score." },
+        "stop_dist": { "type": ["number", "null"], "description": "Dollar stop distance (in ADJUSTED-price space) defining initial risk (R unit) for entries; null for exits. NOT a live stop — size_calculator must derive the real stop from a live quote." },
+        "required_inputs": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Features/indicators the signal depends on. Nullable for backtest-only strategies; REQUIRED (non-empty) when strategy.live_capable=true so pre_trade_check can verify live input availability/freshness." },
+        "data_quality_flags": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Optional per-signal data-quality flags (e.g. a gap near this bar)." }
+      }
+    },
+    "trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One realized closed position. Mirrors engine.Trade.",
+      "required": ["symbol", "entry_date", "exit_date", "entry", "exit", "r_multiple", "pct_return", "exit_reason"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "source_signal_id": { "type": ["string", "null"], "description": "signal_id of the entry signal that produced this trade; null if not linkable." },
+        "entry_date": { "$ref": "#/$defs/timestamp" },
+        "exit_date": { "$ref": "#/$defs/timestamp" },
+        "entry": { "type": "number" },
+        "exit": { "type": "number" },
+        "shares": { "type": "number" },
+        "r_multiple": { "type": "number" },
+        "pct_return": { "type": "number" },
+        "exit_reason": { "enum": ["stop", "target", "signal", "time", "session", "gap_stop", "rotation", "eod"] }
+      }
+    },
+    "symbol_stat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trade_count", "win_rate", "expectancy_R", "profit_factor", "profit_factor_is_infinite"],
+      "properties": {
+        "trade_count": { "type": "integer", "minimum": 0 },
+        "win_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "expectancy_R": { "type": "number" },
+        "profit_factor": { "type": ["number", "null"] },
+        "profit_factor_is_infinite": { "type": "boolean" }
+      }
+    },
+    "gate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluated", "passed", "reasons"],
+      "properties": {
+        "evaluated": { "type": "boolean" },
+        "passed": { "type": ["boolean", "null"] },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "validation_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "repo_commit", "strategy_name", "split_label"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "repo_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+        "strategy_name": { "type": "string" },
+        "universe_label": { "type": ["string", "null"] },
+        "symbols": { "type": ["array", "null"], "items": { "type": "string" } },
+        "split_label": { "enum": ["IS", "OOS", "full"] },
+        "research_status": { "type": ["object", "null"] }
+      }
+    },
+    "caveat": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "severity", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "severity": { "enum": ["low", "medium", "high"] },
+            "message": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}
