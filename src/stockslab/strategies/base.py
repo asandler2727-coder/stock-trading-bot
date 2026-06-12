@@ -63,7 +63,24 @@ REGISTRY: dict[str, object] = {}
 
 
 def register(cls):
-    """Class decorator that instantiates the strategy and adds it to REGISTRY by name."""
+    """Class decorator that instantiates the strategy and adds it to REGISTRY by name.
+
+    Fails loud on two parallel-authoring footguns:
+    - name still "base": the subclass forgot @dataclass (so the field default
+      never took effect) or forgot to set a unique name. Either way it would
+      silently clobber another entry.
+    - duplicate name: two strategy modules chose the same name.
+    """
     inst = cls()
+    if inst.name == "base":
+        raise ValueError(
+            f"{cls.__name__} registered with name 'base' — set a unique `name` "
+            "field and decorate the class with @dataclass so the default applies."
+        )
+    if inst.name in REGISTRY and type(REGISTRY[inst.name]) is not cls:
+        raise ValueError(
+            f"duplicate strategy name {inst.name!r}: already registered by "
+            f"{type(REGISTRY[inst.name]).__name__}, now {cls.__name__}."
+        )
     REGISTRY[inst.name] = inst
     return cls
