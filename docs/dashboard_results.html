@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strategy Results Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: oklch(13% 0.012 166);
+      --panel: oklch(18% 0.014 166);
+      --panel-2: oklch(22% 0.016 166);
+      --line: oklch(33% 0.018 166);
+      --text: oklch(91% 0.018 166);
+      --muted: oklch(68% 0.025 166);
+      --faint: oklch(51% 0.025 166);
+      --good: oklch(72% 0.15 154);
+      --bad: oklch(67% 0.18 27);
+      --warn: oklch(78% 0.14 82);
+      --accent: oklch(73% 0.13 194);
+      --accent-2: oklch(72% 0.12 300);
+      --shadow: 0 16px 48px oklch(4% 0.01 166 / 0.42);
+      --space-2xs: 4px;
+      --space-xs: 8px;
+      --space-sm: 12px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --space-2xl: 48px;
+      --radius: 8px;
+      font-family: Avenir Next, Avenir, Montserrat, Verdana, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        linear-gradient(145deg, oklch(14% 0.018 166), oklch(10% 0.008 166) 54%, oklch(15% 0.018 220));
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    button,
+    table {
+      font: inherit;
+    }
+
+    .shell {
+      width: min(1540px, calc(100% - clamp(24px, 4vw, 72px)));
+      margin: 0 auto;
+      padding: var(--space-xl) 0 var(--space-2xl);
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: var(--space-lg);
+      padding: var(--space-md) 0 var(--space-xl);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 760px;
+      font-family: Optima, Candara, Avenir Next, sans-serif;
+      font-size: clamp(2.2rem, 5vw, 5.6rem);
+      line-height: 0.9;
+      letter-spacing: 0;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: var(--space-sm);
+    }
+
+    .deck {
+      max-width: 66ch;
+      color: var(--muted);
+      font-size: 1rem;
+      margin-top: var(--space-md);
+    }
+
+    .serve-note {
+      justify-self: end;
+      align-self: start;
+      max-width: 360px;
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: oklch(17% 0.014 166 / 0.78);
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+
+    code {
+      color: var(--text);
+      background: oklch(25% 0.018 166);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 2px 6px;
+      white-space: nowrap;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in oklch, var(--panel) 82%, transparent);
+      padding: var(--space-md);
+      min-height: 102px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--faint);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: var(--space-xs);
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    .metric small {
+      display: block;
+      color: var(--muted);
+      margin-top: var(--space-xs);
+    }
+
+    section {
+      margin-top: var(--space-xl);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: var(--space-lg);
+      margin-bottom: var(--space-md);
+    }
+
+    .section-head h2 {
+      font-size: 1.2rem;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      max-width: 64ch;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: oklch(17.5% 0.014 166 / 0.94);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 13px var(--space-md);
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--faint);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease;
+    }
+
+    tbody tr:hover,
+    tbody tr.is-selected {
+      background: oklch(23% 0.02 166);
+    }
+
+    tbody tr:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .strategy-name {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      font-weight: 800;
+    }
+
+    .rank-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--faint);
+      flex: 0 0 auto;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 78px;
+      min-height: 28px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+    }
+
+    .status.pass {
+      color: var(--good);
+      background: oklch(21% 0.045 154);
+    }
+
+    .status.fail {
+      color: var(--bad);
+      background: oklch(20% 0.035 27);
+    }
+
+    .detail {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1.2fr);
+      gap: var(--space-md);
+      padding: var(--space-lg);
+      border-top: 1px solid var(--line);
+      background: oklch(15.5% 0.014 166);
+    }
+
+    .detail h3 {
+      font-size: 1.7rem;
+      line-height: 1;
+      margin-bottom: var(--space-sm);
+    }
+
+    .detail p {
+      color: var(--muted);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(96px, 1fr));
+      gap: var(--space-sm);
+    }
+
+    .detail-stat {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: var(--space-sm);
+    }
+
+    .detail-stat span {
+      display: block;
+      color: var(--faint);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .detail-stat strong {
+      display: block;
+      margin-top: var(--space-xs);
+      font-size: 1.2rem;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: var(--space-md);
+    }
+
+    .chart-card {
+      min-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: oklch(17.5% 0.014 166 / 0.92);
+      box-shadow: var(--shadow);
+      padding: var(--space-md);
+      display: grid;
+      grid-template-rows: auto minmax(260px, 1fr);
+      gap: var(--space-sm);
+    }
+
+    .chart-card h3 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      font-size: 1rem;
+    }
+
+    .chart-card h3 span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .wide-chart {
+      min-height: 460px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 260px;
+    }
+
+    .loading,
+    .error {
+      padding: var(--space-lg);
+      color: var(--muted);
+    }
+
+    .error {
+      color: var(--bad);
+    }
+
+    @media (max-width: 900px) {
+      header,
+      .detail {
+        grid-template-columns: 1fr;
+      }
+
+      .serve-note {
+        justify-self: start;
+      }
+
+      .summary-strip,
+      .detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .section-head {
+        display: grid;
+      }
+
+      .section-head p {
+        text-align: left;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .shell {
+        width: min(100% - 24px, 1540px);
+        padding-top: var(--space-md);
+      }
+
+      h1 {
+        font-size: 2.35rem;
+      }
+
+      .summary-strip,
+      .detail-grid,
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-card {
+        min-height: 330px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">Stockslab research</p>
+        <h1>Strategy results dashboard</h1>
+        <p class="deck">Twelve backtests, one gate. Survivors have equity curves and sensitivity checks; every strategy gets the same pass/fail read.</p>
+      </div>
+      <p class="serve-note">Serve with: <code>python3 -m http.server 8080</code> from the project root</p>
+    </header>
+
+    <div class="summary-strip" id="summaryStrip" aria-live="polite">
+      <div class="metric"><span>Strategies</span><strong>12</strong><small>Loading local results</small></div>
+      <div class="metric"><span>Passed gate</span><strong>--</strong><small>IS PF, IS N, OOS PF</small></div>
+      <div class="metric"><span>Best IS PF</span><strong>--</strong><small>Waiting for JSON</small></div>
+      <div class="metric"><span>Total IS trades</span><strong>--</strong><small>Across all strategies</small></div>
+    </div>
+
+    <section>
+      <div class="section-head">
+        <h2>Gate Summary</h2>
+        <p>Gate: IS PF &gt; 1.3, IS N >= 500, OOS PF &gt; 1.15. Rows sort by IS PF descending.</p>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Strategy</th>
+                <th>IS PF</th>
+                <th>IS N</th>
+                <th>OOS PF</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="gateRows">
+              <tr><td colspan="5" class="loading">Loading results...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="detailPanel" class="detail" hidden></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Equity Curves</h2>
+        <p>Cumulative R from IS trades, sorted by exit date. Survivors only.</p>
+      </div>
+      <div class="chart-grid" id="equityGrid"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Exit Reason Breakdown</h2>
+        <p>IS exit reason counts, stacked by strategy.</p>
+      </div>
+      <div class="chart-card wide-chart">
+        <h3>Exit reasons <span>IS results</span></h3>
+        <canvas id="exitReasonChart"></canvas>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Robustness Sensitivity</h2>
+        <p>Survivor parameter sweeps with the PF 1.3 gate floor marked on each chart.</p>
+      </div>
+      <div class="chart-grid" id="robustnessGrid"></div>
+    </section>
+  </main>
+
+  <script>
+    const strategies = [
+      'bb_squeeze_breakout',
+      'donchian_breakout',
+      'ema_pullback',
+      'gap_fade',
+      'high52_breakout',
+      'intraday_momentum',
+      'levered_etf_meanrev',
+      'orb',
+      'rsi2_meanrev',
+      'sector_rotation',
+      'vwap_reclaim',
+      'xsec_momentum'
+    ];
+
+    const survivors = ['xsec_momentum', 'donchian_breakout', 'high52_breakout', 'bb_squeeze_breakout'];
+    const exitReasons = ['stop', 'signal', 'gap_stop', 'target', 'time', 'session', 'eod', 'rotation'];
+    const resultRoot = location.pathname.includes('/docs/') ? '../results' : 'results';
+    const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+    const intFmt = new Intl.NumberFormat('en-US');
+
+    const colors = {
+      good: 'oklch(72% 0.15 154)',
+      bad: 'oklch(67% 0.18 27)',
+      warn: 'oklch(78% 0.14 82)',
+      accent: 'oklch(73% 0.13 194)',
+      accent2: 'oklch(72% 0.12 300)',
+      grid: 'oklch(33% 0.018 166)',
+      muted: 'oklch(68% 0.025 166)',
+      text: 'oklch(91% 0.018 166)'
+    };
+
+    Chart.defaults.color = colors.muted;
+    Chart.defaults.borderColor = colors.grid;
+    Chart.defaults.font.family = 'Avenir Next, Avenir, Montserrat, Verdana, sans-serif';
+
+    const gateLinePlugin = {
+      id: 'gateLine',
+      afterDraw(chart, args, opts) {
+        if (!opts || !opts.value) return;
+        const yScale = chart.scales.y;
+        const xScale = chart.scales.x;
+        const y = yScale.getPixelForValue(opts.value);
+        const { ctx } = chart;
+        ctx.save();
+        ctx.strokeStyle = opts.color || colors.warn;
+        ctx.setLineDash([7, 6]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(xScale.left, y);
+        ctx.lineTo(xScale.right, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = opts.color || colors.warn;
+        ctx.font = '700 12px Avenir Next, sans-serif';
+        ctx.fillText(`PF ${opts.value}`, xScale.left + 6, y - 7);
+        ctx.restore();
+      }
+    };
+    Chart.register(gateLinePlugin);
+
+    function titleize(name) {
+      return name.split('_').map(part => part.toUpperCase() === 'ETF' ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)).join(' ');
+    }
+
+    function resultPath(file) {
+      return `${resultRoot}/${file}`;
+    }
+
+    async function fetchJson(file) {
+      const response = await fetch(resultPath(file));
+      if (!response.ok) throw new Error(`${file}: ${response.status}`);
+      return response.json();
+    }
+
+    async function fetchText(file) {
+      const response = await fetch(resultPath(file));
+      if (!response.ok) throw new Error(`${file}: ${response.status}`);
+      return response.text();
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines.shift().split(',');
+      return lines.map(line => {
+        const values = line.split(',');
+        return headers.reduce((row, header, index) => {
+          row[header] = values[index] ?? '';
+          return row;
+        }, {});
+      });
+    }
+
+    function passedGate(row) {
+      return row.is.pf > 1.3 && row.is.n >= 500 && row.oos.pf > 1.15;
+    }
+
+    function metric(value, decimals = 2) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return '--';
+      return Number(value).toFixed(decimals);
+    }
+
+    function drawSummary(rows) {
+      const passed = rows.filter(passedGate).length;
+      const best = rows[0];
+      const totalTrades = rows.reduce((sum, row) => sum + row.is.n, 0);
+      document.getElementById('summaryStrip').innerHTML = `
+        <div class="metric"><span>Strategies</span><strong>${rows.length}</strong><small>Loaded from /results</small></div>
+        <div class="metric"><span>Passed gate</span><strong>${passed}</strong><small>${rows.length - passed} failed</small></div>
+        <div class="metric"><span>Best IS PF</span><strong>${metric(best.is.pf)}</strong><small>${titleize(best.name)}</small></div>
+        <div class="metric"><span>Total IS trades</span><strong>${intFmt.format(totalTrades)}</strong><small>All strategy ledgers</small></div>
+      `;
+    }
+
+    function drawTable(rows) {
+      const tbody = document.getElementById('gateRows');
+      tbody.innerHTML = rows.map((row, index) => {
+        const pass = passedGate(row);
+        const dot = pass ? colors.good : colors.bad;
+        return `
+          <tr tabindex="0" data-strategy="${row.name}" aria-label="${titleize(row.name)} ${pass ? 'passed' : 'failed'}">
+            <td><span class="strategy-name"><span class="rank-dot" style="background:${dot}"></span>${titleize(row.name)}</span></td>
+            <td>${metric(row.is.pf)}</td>
+            <td>${intFmt.format(row.is.n)}</td>
+            <td>${metric(row.oos.pf)}</td>
+            <td><span class="status ${pass ? 'pass' : 'fail'}">${pass ? 'PASS' : 'FAIL'}</span></td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', () => selectRow(rows, tr.dataset.strategy));
+        tr.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectRow(rows, tr.dataset.strategy);
+          }
+        });
+      });
+
+      selectRow(rows, rows[0].name);
+    }
+
+    function selectRow(rows, name) {
+      const row = rows.find(item => item.name === name);
+      document.querySelectorAll('#gateRows tr').forEach(tr => {
+        tr.classList.toggle('is-selected', tr.dataset.strategy === name);
+      });
+
+      const pass = passedGate(row);
+      const failedChecks = [
+        row.is.pf > 1.3 ? null : `IS PF ${metric(row.is.pf)} <= 1.30`,
+        row.is.n >= 500 ? null : `IS N ${intFmt.format(row.is.n)} < 500`,
+        row.oos.pf > 1.15 ? null : `OOS PF ${metric(row.oos.pf)} <= 1.15`
+      ].filter(Boolean);
+
+      const panel = document.getElementById('detailPanel');
+      panel.hidden = false;
+      panel.innerHTML = `
+        <div>
+          <p class="eyebrow">${pass ? 'Gate pass' : 'Gate fail'}</p>
+          <h3>${titleize(row.name)}</h3>
+          <p>${pass ? 'Clears the current research gate.' : `Blocked by ${failedChecks.join(', ')}.`}</p>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-stat"><span>IS win rate</span><strong>${metric(row.is.wr * 100, 1)}%</strong></div>
+          <div class="detail-stat"><span>OOS win rate</span><strong>${metric(row.oos.wr * 100, 1)}%</strong></div>
+          <div class="detail-stat"><span>IS avg R</span><strong>${metric(row.is.avg_r)}</strong></div>
+          <div class="detail-stat"><span>OOS avg R</span><strong>${metric(row.oos.avg_r)}</strong></div>
+          <div class="detail-stat"><span>IS hold bars</span><strong>${metric(row.is.med_hold_bars, 1)}</strong></div>
+          <div class="detail-stat"><span>OOS hold bars</span><strong>${metric(row.oos.med_hold_bars, 1)}</strong></div>
+          <div class="detail-stat"><span>IS max DD</span><strong>${metric(row.is.max_dd_1pct * 100, 1)}%</strong></div>
+          <div class="detail-stat"><span>OOS max DD</span><strong>${metric(row.oos.max_dd_1pct * 100, 1)}%</strong></div>
+        </div>
+      `;
+    }
+
+    function makeChartCard(parent, title, meta) {
+      const card = document.createElement('article');
+      card.className = 'chart-card';
+      card.innerHTML = `<h3>${title}<span>${meta}</span></h3><canvas></canvas>`;
+      parent.appendChild(card);
+      return card.querySelector('canvas');
+    }
+
+    async function drawEquityCurves() {
+      const grid = document.getElementById('equityGrid');
+      grid.innerHTML = '';
+
+      for (const name of survivors) {
+        const text = await fetchText(`${name}_IS_trades.csv`);
+        const trades = parseCsv(text)
+          .map(trade => ({
+            exitDate: new Date(trade.exit_date),
+            r: Number(trade.r_multiple)
+          }))
+          .filter(trade => Number.isFinite(trade.r))
+          .sort((a, b) => a.exitDate - b.exitDate);
+
+        let cumulative = 0;
+        const points = trades.map((trade, index) => {
+          cumulative += trade.r;
+          return {
+            x: index + 1,
+            y: Number(cumulative.toFixed(4)),
+            label: trade.exitDate.toISOString().slice(0, 10)
+          };
+        });
+
+        const canvas = makeChartCard(grid, titleize(name), `${trades.length.toLocaleString()} IS trades`);
+        new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: points.map(point => point.x),
+            datasets: [{
+              label: 'Cumulative R',
+              data: points.map(point => point.y),
+              borderColor: name === 'xsec_momentum' ? colors.accent : colors.good,
+              backgroundColor: 'oklch(73% 0.13 194 / 0.14)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.18
+            }]
+          },
+          options: {
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title(items) {
+                    const point = points[items[0].dataIndex];
+                    return `Trade ${point.x} · ${point.label}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { title: { display: true, text: 'Trade count' }, grid: { display: false } },
+              y: { title: { display: true, text: 'Cumulative R' } }
+            }
+          }
+        });
+      }
+    }
+
+    function drawExitReasons(rows) {
+      const labels = rows.map(row => titleize(row.name));
+      const palette = [
+        'oklch(72% 0.15 154)',
+        'oklch(73% 0.13 194)',
+        'oklch(67% 0.18 27)',
+        'oklch(78% 0.14 82)',
+        'oklch(72% 0.12 300)',
+        'oklch(68% 0.12 250)',
+        'oklch(76% 0.08 120)',
+        'oklch(70% 0.09 40)'
+      ];
+
+      new Chart(document.getElementById('exitReasonChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: exitReasons.map((reason, index) => ({
+            label: reason,
+            data: rows.map(row => row.is.exit_reason_counts?.[reason] || 0),
+            backgroundColor: palette[index],
+            borderWidth: 0
+          }))
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12 } }
+          },
+          scales: {
+            x: { stacked: true, ticks: { maxRotation: 55, minRotation: 30 }, grid: { display: false } },
+            y: { stacked: true, title: { display: true, text: 'Exit count' } }
+          }
+        }
+      });
+    }
+
+    async function drawRobustness() {
+      const grid = document.getElementById('robustnessGrid');
+      grid.innerHTML = '';
+
+      for (const name of survivors) {
+        const data = await fetchJson(`robustness_${name}.json`);
+        const canvas = makeChartCard(grid, titleize(name), `${data.length} sweeps`);
+        new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: data.map(row => `${row.param} ${row.value}`),
+            datasets: [{
+              label: 'PF',
+              data: data.map(row => row.pf),
+              backgroundColor: data.map(row => row.pf >= 1.3 ? 'oklch(72% 0.15 154 / 0.78)' : 'oklch(67% 0.18 27 / 0.82)'),
+              borderColor: data.map(row => row.pf >= 1.3 ? colors.good : colors.bad),
+              borderWidth: 1
+            }]
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              gateLine: { value: 1.3, color: colors.warn },
+              tooltip: {
+                callbacks: {
+                  afterLabel(context) {
+                    return `N: ${intFmt.format(data[context.dataIndex].n)}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { ticks: { maxRotation: 65, minRotation: 45 }, grid: { display: false } },
+              y: { beginAtZero: true, title: { display: true, text: 'Profit factor' } }
+            }
+          }
+        });
+      }
+    }
+
+    async function init() {
+      try {
+        const rows = await Promise.all(strategies.map(async name => {
+          const [isResult, oosResult] = await Promise.all([
+            fetchJson(`${name}_IS.json`),
+            fetchJson(`${name}_OOS.json`)
+          ]);
+          return { name, is: isResult, oos: oosResult };
+        }));
+
+        rows.sort((a, b) => b.is.pf - a.is.pf);
+        drawSummary(rows);
+        drawTable(rows);
+        await drawEquityCurves();
+        drawExitReasons(rows);
+        await drawRobustness();
+      } catch (error) {
+        document.getElementById('gateRows').innerHTML = `<tr><td colspan="5" class="error">Could not load local result files: ${error.message}</td></tr>`;
+        document.getElementById('equityGrid').innerHTML = `<div class="error panel">Serve this from the project root, then open /docs/dashboard_results.html.</div>`;
+        console.error(error);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

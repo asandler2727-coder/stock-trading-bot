@@ -32,7 +32,7 @@ class EmaPullback(SignalStrategy):
         rsi_thresh = float(p.get("rsi_thresh", 40))
         stop_mult = float(p.get("stop_mult", 1.5))
 
-        uptrend = (ema50 > ema200) & (df["close"] > ema50)
+        uptrend = (ema50 > ema200) & (df["close"] > ema200)
         pullback = df["low"] <= ema20
         oversold = rsi_vals < rsi_thresh
 

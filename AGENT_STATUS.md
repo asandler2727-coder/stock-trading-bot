@@ -9,42 +9,67 @@ Human (Austin) is the courier — paste agent output back into this file when th
 ## Claude — engine / research lane
 
 **Last updated:** 2026-06-12
-**Status:** IDLE — waiting for next task
+**Status:** ACTIVE
 
 ### Done this session
-- Drafted result contract v0.1.0 → revised to v0.2.0 folding in Codex's 7 requests
-- Added watchlist/scanner forward-compat fields
-- Wrote validator (`contracts/validate.py`) — 5 schema guards enforced, green
-- Wrote contracts/ artifacts: schema, examples, spec doc, README
+- Drafted result contract v0.1.0 → revised to v0.2.0; contracts/ committed
+- Phase D Kanban audits (D1 ×4, D2 synthesis) — all done; `docs/REPORT_D2.md` written
+- Digested AGY findings; updated canonical `ema_pullback_IS.json` / `_OOS.json` from new trade CSVs
+- Ran robustness sweep for ema_pullback → `results/robustness_ema_pullback.json`
+
+### Phase D results
+
+**5 gate passers (ema_pullback added after AGY bug fix):**
+
+| Strategy | IS PF | IS N | OOS PF | Min robustness PF | Verdict |
+|---|---|---|---|---|---|
+| xsec_momentum | 3.326 | 651 | 2.212 | — | REVIEW (regime + concentration) |
+| donchian_breakout | 1.624 | 2698 | 1.361 | 1.50 | CONFIRM |
+| high52_breakout | 1.515 | 812 | 1.322 | — | CONFIRM |
+| ema_pullback | 1.387 | 5423 | 1.290 | 1.28 | REVIEW (marginal robustness) |
+| bb_squeeze_breakout | 1.313 | 1471 | 1.171 | — | REVIEW (marginal edge) |
+
+**ema_pullback details:**
+- Bug: `close > ema50` was mutually exclusive with `rsi(14) < 40` — fixed by AGY (now uses `close > ema200`)
+- Robustness: all param sweeps hold PF ≥ 1.28. At 2× slippage: PF=1.327 (barely holds)
+- Code smell: ema_fast/ema_mid sweeps return identical PF — params may not be wired into indicator calls; Codex should verify
+
+**D2 report corrections (two errors in `docs/REPORT_D2.md`):**
+1. D2 called ema_pullback "not viable" — now gate passer #5 after the bug fix
+2. D2 called levered_etf_meanrev OOS>IS "data mining" — AGY confirmed it's the QQQ filter working correctly (filter blocked all 2022 trades; 2018 PF=0.57, 2019 PF=0.78 hurt IS). Still a gate fail (IS PF=1.116) but mechanically explained, not overfit
+
+**Paper-trade ranking:**
+1. **donchian_breakout** — highest confidence; 2698 trades; simplest logic; cleanest audit
+2. **high52_breakout** — clean audit; strong diversification
+3. **ema_pullback** — large trade count (5423); resolve params wiring issue first
+4. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
+5. **bb_squeeze_breakout** — most marginal; lowest priority
 
 ### Open (engine lane)
-- [ ] **Commit `contracts/`** — untracked; schema + spec + examples + validate.py + README
-- [ ] **Push to origin** — 17+ commits ahead of origin/main
-
-### Resolved
-- [x] **Q4 bar-label check** (2026-06-12) — **BAR-START**. Index label = bar open time. `09:30` = opens 9:30, closes 10:30. Timezone: `America/New_York`. 7 bars/day (09:30–15:30). Contract `entry_time` / `exit_time` fields should be interpreted as bar-open timestamps.
-
-### Blocking on
-Nothing currently.
-
-### Notes for next session
-- `scripts/robustness.py` has uncommitted modifications (not mine — don't touch without knowing what they are)
-- jsonschema is installed in .venv but NOT in requirements.txt — dev-only; was supposed to be added by AGY
+- [ ] Decide paper-trade go/no-go for donchian + high52 (ready now)
+- [ ] Codex task: verify ema_pullback ema_fast/ema_mid params are wired into indicator calls
+- [ ] levered_etf_meanrev: consider re-evaluation with longer IS window (low priority)
 
 ---
 
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** TASK READY
+**Status:** IDLE — dashboard complete
 
 ### Done
 - Reviewed result contract v0.2.0
 - Confirmed 7 requests were incorporated
 - Signed off on 3 open judgment calls
+- Built `docs/dashboard_results.html` as a standalone Chart.js dashboard
+- Verified via local server at `http://localhost:8080/docs/dashboard_results.html`: 12 gate rows, 9 charts, no browser console errors, mobile-width no page overflow
 
 ### Open
-- [ ] **Build results dashboard** — see task below
+- [x] **Build results dashboard** — see task below
+
+### Issues / notes
+- Page uses runtime `fetch()`, so open it through a local server from the project root: `python3 -m http.server 8080`
+- Existing unrelated workspace changes were left alone, including AGY lane strategy/test/report work
 
 ### Task: Build results dashboard (`docs/dashboard_results.html`)
 
@@ -90,10 +115,14 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 - Wired emitter into backtest runner (443432c)
 - Added permanent schema guard tests (b367efe)
 - Added `jsonschema` to `requirements.txt` (bb4e4ca)
+- **Fix `ema_pullback`**: Bug found where `close > ema50` in the uptrend condition was mutually exclusive with `rsi(14) < 40`. Fixed by relaxing the uptrend condition to `close > ema200`. New IS trade count: 5423, New IS PF: 1.39.
+- **Investigate `levered_etf_meanrev`**:
+  - **Year-by-year PF**: IS had a few bad years (e.g., 2018: 0.569, 2019: 0.775).
+  - **Symbol breakdown**: OOS trades are widely distributed (SQQQ: 52, SOXS: 51, UVXY: 49, TNA: 42, UPRO: 38, QQQ: 36, TQQQ: 35, SOXL: 35). Not concentrated in a single ETF, though bear ETFs are heavily represented.
+  - **QQQ filter verdict**: The filter is working perfectly. There were exactly 0 trades in 2022 because QQQ was below its 200-day SMA. This entirely bypassed the 2022 bear market, which is why OOS outperformed IS.
 
 ### Open
-- [ ] **Fix `ema_pullback` — only 15 IS trades (bug)** — see Task 1 below
-- [ ] **Investigate `levered_etf_meanrev` OOS > IS anomaly** — see Task 2 below
+- (None)
 
 ### Task 1: Fix `ema_pullback` (only 15 IS trades — signal bug)
 
