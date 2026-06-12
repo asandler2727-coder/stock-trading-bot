@@ -824,11 +824,19 @@ class TestTradeDataclass:
 # Test 18: run_rotation_backtest stub raises NotImplementedError
 # ---------------------------------------------------------------------------
 
-class TestRotationStub:
-    def test_rotation_raises_not_implemented(self):
+class TestRotationImplemented:
+    def test_rotation_empty_panel_returns_empty(self):
+        """run_rotation_backtest with an empty panel returns an empty trade list."""
         from stockslab.engine import run_rotation_backtest
-        with pytest.raises(NotImplementedError):
-            run_rotation_backtest(None, {}, {})
+        from stockslab.strategies.base import RotationStrategy
+        import pandas as pd
+
+        class _EmptyStrategy(RotationStrategy):
+            def target_holdings(self, panel, dates):
+                return pd.DataFrame(index=pd.DatetimeIndex([]), columns=[])
+
+        trades = run_rotation_backtest(_EmptyStrategy(), {}, {})
+        assert trades == []
 
 
 # ---------------------------------------------------------------------------

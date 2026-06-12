@@ -420,9 +420,167 @@ def run_signal_backtest(
     return trades
 
 
-def run_rotation_backtest(strategy, panel, slippage_bps_map) -> list[Trade]:
-    """Stub — to be implemented by the next agent (Task A5)."""
-    raise NotImplementedError("run_rotation_backtest is not yet implemented (Task A5)")
+def run_rotation_backtest(strategy, panel: dict, slippage_bps_map: dict) -> list[Trade]:
+    """Run a rotation-style backtest across a panel of symbols.
+
+    Semantics (frozen API contract):
+    - strategy.target_holdings(panel, dates) returns a DataFrame of 0/1 membership
+      indexed by rebalance dates (subset of the union of all symbol dates).
+    - At each rebalance date d, compare the new target to the current holdings:
+        * Add  (0 -> 1): enter at the OPEN of the NEXT bar after d, with buy slip.
+        * Drop (1 -> 0): exit  at the OPEN of the NEXT bar after d, with sell slip.
+        * Held (1 -> 1): no action (position continues untouched).
+    - Each add results in exactly one Trade whose exit is triggered at the next drop
+      rebalance or at end-of-data (eod).
+    - r_multiple = pct_return / 0.10  (10%-notional R proxy: a 10% move = 1R;
+      this is a sizing-independent ranking anchor for rotation strategies, which
+      do not use an explicit $ stop distance).
+    - pct_return = (exit_price - entry_price) / entry_price, slippage on both sides.
+    - exit_reason: "rotation" when exited at a rebalance drop; "eod" when data ends
+      while position is still held.
+    - If a symbol is added at the last rebalance date and no next bar exists, no Trade
+      is emitted (cannot fill).
+
+    Parameters
+    ----------
+    strategy : RotationStrategy
+        Strategy instance with target_holdings().
+    panel : dict[str, pd.DataFrame]
+        Symbol -> OHLCV DataFrame.
+    slippage_bps_map : dict[str, int]
+        Symbol -> per-side slippage in basis points.
+
+    Returns
+    -------
+    list[Trade]
+        One Trade per (symbol, holding period) pair.
+    """
+    # Build the union of all dates across the panel
+    all_dates: pd.DatetimeIndex = pd.DatetimeIndex(
+        sorted(set().union(*[set(df.index) for df in panel.values()]))
+    )
+
+    # Get target holdings from the strategy
+    holdings_df: pd.DataFrame = strategy.target_holdings(panel, all_dates)
+    # holdings_df: index = rebalance dates, columns = symbols, values = 0/1
+
+    trades: list[Trade] = []
+
+    # Track current open positions per symbol:
+    #   pending_entry[symbol] = (entry_date, entry_price, slippage_bps) or None
+    pending_entries: dict[str, tuple[pd.Timestamp, float, float] | None] = {}
+
+    # Current membership state (last known): symbol -> 0|1
+    current_holdings: dict[str, int] = {sym: 0 for sym in holdings_df.columns}
+
+    # Process rebalances in chronological order
+    rebalance_dates = holdings_df.index.sort_values()
+
+    for reb_date in rebalance_dates:
+        new_row = holdings_df.loc[reb_date]
+
+        # For each symbol in the holdings matrix, determine action
+        for sym in holdings_df.columns:
+            new_val = int(new_row[sym])
+            old_val = current_holdings.get(sym, 0)
+
+            df = panel.get(sym)
+            if df is None:
+                continue
+
+            slip_bps = slippage_bps_map.get(sym, 5)
+            slip = slip_bps / 10_000
+
+            if old_val == 0 and new_val == 1:
+                # ADD: find the next bar after reb_date, enter at its open
+                future = df.index[df.index > reb_date]
+                if len(future) == 0:
+                    # No fill bar available — skip
+                    current_holdings[sym] = 1  # still mark as intended-hold
+                    pending_entries[sym] = None  # sentinel: added but unfillable
+                    continue
+                fill_date = future[0]
+                entry_price = float(df.loc[fill_date, "open"]) * (1 + slip)
+                pending_entries[sym] = (fill_date, entry_price, slip_bps)
+                current_holdings[sym] = 1
+
+            elif old_val == 1 and new_val == 0:
+                # DROP: find the next bar after reb_date, exit at its open
+                entry_info = pending_entries.pop(sym, None)
+                if entry_info is None:
+                    # Was added on last bar (unfillable) — nothing to close
+                    current_holdings[sym] = 0
+                    continue
+                entry_date, entry_price, entry_slip_bps = entry_info
+                entry_slip = entry_slip_bps / 10_000
+
+                future = df.index[df.index > reb_date]
+                if len(future) == 0:
+                    # No exit bar: eod at last close
+                    exit_date = df.index[-1]
+                    exit_price = float(df.loc[exit_date, "close"]) * (1 - entry_slip)
+                    reason = "eod"
+                else:
+                    exit_date = future[0]
+                    exit_price = float(df.loc[exit_date, "open"]) * (1 - entry_slip)
+                    reason = "rotation"
+
+                pct_return = (exit_price - entry_price) / entry_price
+                # r_multiple = pct_return / 0.10 (10%-notional R proxy:
+                # a 10% move on the position equates to 1R in the ranking metric;
+                # rotation strategies have no explicit $ stop, so we use this
+                # notional anchor to keep r_multiple comparable across signal
+                # and rotation strategies for gate evaluation purposes.)
+                r_multiple = pct_return / 0.10
+
+                trades.append(Trade(
+                    symbol=sym,
+                    entry_date=entry_date,
+                    exit_date=exit_date,
+                    entry=entry_price,
+                    exit=exit_price,
+                    shares=1.0,
+                    r_multiple=r_multiple,
+                    pct_return=pct_return,
+                    exit_reason=reason,
+                ))
+                current_holdings[sym] = 0
+
+            # else: held (1->1) or unaffected (0->0): no action
+
+    # After all rebalances: any symbols still open get an eod exit at their last close
+    for sym, entry_info in list(pending_entries.items()):
+        if entry_info is None:
+            continue  # unfillable add, skip
+        if current_holdings.get(sym, 0) != 1:
+            continue  # already closed
+
+        df = panel.get(sym)
+        if df is None:
+            continue
+
+        entry_date, entry_price, entry_slip_bps = entry_info
+        entry_slip = entry_slip_bps / 10_000
+
+        exit_date = df.index[-1]
+        exit_price = float(df.loc[exit_date, "close"]) * (1 - entry_slip)
+
+        pct_return = (exit_price - entry_price) / entry_price
+        r_multiple = pct_return / 0.10
+
+        trades.append(Trade(
+            symbol=sym,
+            entry_date=entry_date,
+            exit_date=exit_date,
+            entry=entry_price,
+            exit=exit_price,
+            shares=1.0,
+            r_multiple=r_multiple,
+            pct_return=pct_return,
+            exit_reason="eod",
+        ))
+
+    return trades
 
 
 def run_universe(
