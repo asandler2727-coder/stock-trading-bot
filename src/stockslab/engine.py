@@ -129,8 +129,14 @@ def run_signal_backtest(
             # ---------------------------------------------------------------
             exited = False
 
-            # (a) Gap through stop: open <= stop_price
-            if o <= stop_price:
+            # (a) Gap through stop: open <= stop_price.
+            # Skip on the ENTRY bar (bars_held == 0): there is no carried-over
+            # prior-bar stop to gap through. The open IS the entry reference, and
+            # entry_price = open*(1+slip) > open always, so any stop_dist smaller
+            # than open*slip would otherwise fabricate a phantom gap_stop even
+            # though the bar never traded below its own open. A genuine intrabar
+            # pierce on the entry bar is still caught by branch (b) (low <= stop).
+            if bars_held > 0 and o <= stop_price:
                 ep = o * (1 - slip)
                 r = (ep - entry_price) / stop_dist_initial
                 pct = (ep - entry_price) / entry_price
@@ -340,6 +346,30 @@ def run_signal_backtest(
                             r_multiple=r,
                             pct_return=pct,
                             exit_reason="target",
+                        ))
+                        in_position = False
+                        exited = True
+
+                    # Time stop on the ENTRY bar (gap_fade same-bar round trip).
+                    # entry_at_open counts the entry bar as bar 1 (bars_held == 1),
+                    # so time_stop_bars <= 1 closes at THIS bar's CLOSE, reason
+                    # "time" — i.e. buy the open, sell the same close. Without this,
+                    # the position leaked into the next bar and exited at the wrong
+                    # (next-open) price as an unintended overnight hold.
+                    if not exited and time_stop_bars is not None and bars_held >= time_stop_bars:
+                        ep = c * (1 - slip)
+                        r = (ep - entry_price) / stop_dist_initial
+                        pct = (ep - entry_price) / entry_price
+                        trades.append(Trade(
+                            symbol=symbol,
+                            entry_date=entry_date,
+                            exit_date=index[i],
+                            entry=entry_price,
+                            exit=ep,
+                            shares=n_shares,
+                            r_multiple=r,
+                            pct_return=pct,
+                            exit_reason="time",
                         ))
                         in_position = False
                         exited = True

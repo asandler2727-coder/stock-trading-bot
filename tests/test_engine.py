@@ -939,3 +939,123 @@ class TestRunUniverseReturnsTrades:
         symbols = {t.symbol for t in trades}
         assert "A" in symbols
         assert "B" in symbols
+
+
+# ===========================================================================
+# REGRESSION TESTS — bugs found by adversarial Opus review (2026-06-12)
+# All 180 prior tests passed while these two results-corrupting bugs survived,
+# because no prior test exercised these specific combinations.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# REGRESSION 1: gap_fade contract — entry_at_open + time_stop_bars=1 must be a
+# SAME-BAR round trip: enter at the entry bar's open, exit at that SAME bar's
+# close, reason "time". The bug held the position overnight and exited at the
+# next bar's open (every gap_fade trade silently became an overnight position).
+#
+# Hand computation (tier 3, slip = 0.0005):
+#   Bar 0: entry_at_open=True, entry_long=True, stop_dist=5.0, time_stop_bars=1
+#     entry = open[0] * (1+slip) = 100.0 * 1.0005 = 100.0500
+#     stop  = 100.05 - 5.0 = 95.05; bar-0 low=99.0 > 95.05 (no stop)
+#     time_stop_bars=1 -> exit at THIS bar's close = 100.5 * (1-slip) = 100.4498
+#     entry_date == exit_date == bar 0; reason "time"
+# ---------------------------------------------------------------------------
+
+class TestGapFadeSameBarTimeStop:
+    def test_entry_at_open_time_stop_1_exits_same_bar_at_close(self):
+        df = _make_df(
+            opens=[100.0, 102.0, 103.0],
+            highs=[101.0, 103.0, 104.0],
+            lows=[99.0, 101.0, 102.0],
+            closes=[100.5, 102.5, 103.5],
+        )
+        signals = pd.DataFrame({
+            "entry_long": [True, False, False],
+            "exit_long": [False, False, False],
+            "stop_dist": [5.0, float("nan"), float("nan")],
+        }, index=df.index)
+        strat = _StubStrategy(signals, name="gapfade", entry_at_open=True, time_stop_bars=1)
+        slip = TIER_BPS[3] / 10_000
+
+        entry = 100.0 * (1 + slip)
+        expected_exit = 100.5 * (1 - slip)   # SAME-bar close
+
+        trades = run_signal_backtest(strat, df, symbol="X", slippage_bps=TIER_BPS[3])
+        assert len(trades) == 1
+        t = trades[0]
+        assert t.exit_reason == "time"
+        assert t.entry_date == df.index[0]
+        assert t.exit_date == df.index[0]          # SAME bar — not overnight
+        assert t.entry == pytest.approx(entry, rel=1e-9)
+        assert t.exit == pytest.approx(expected_exit, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# REGRESSION 2: spurious gap_stop on the ENTRY bar of a standard next-open
+# entry. The entry bar's RAW open was compared against a stop derived from the
+# SLIPPED entry price; since raw open < slipped entry always, any
+# stop_dist < open*slip fabricated an instant phantom gap_stop loss even though
+# the bar never traded below its open. Bites tight-dollar-stop intraday
+# strategies (orb, vwap_reclaim, intraday_momentum).
+#
+# Hand computation (tier 3, slip = 0.0005, TINY stop_dist=0.02):
+#   Bar 0: entry_long=True, stop_dist=0.02
+#   Bar 1 (entry bar): entry = open[1]*(1+slip) = 100.0*1.0005 = 100.05
+#     stop = 100.05 - 0.02 = 100.03
+#     RAW open[1]=100.0 <= 100.03 would (buggily) gap_stop at 100.0*(1-slip).
+#     Correct: NO prior-bar stop exists on the entry bar -> branch (a) skipped.
+#     bar-1 low=100.05 > 100.03 (no legitimate intrabar stop either) -> survive.
+#   Bar 2 (last): eod exit at close[2]=100.5*(1-slip).
+# ---------------------------------------------------------------------------
+
+class TestNoSpuriousGapStopOnEntryBar:
+    def test_tiny_stop_dist_does_not_phantom_gap_stop_on_entry_bar(self):
+        df = _make_df(
+            opens=[100.0, 100.0, 100.4],
+            highs=[100.5, 100.5, 100.6],
+            lows=[99.8, 100.05, 100.2],
+            closes=[100.2, 100.4, 100.5],
+        )
+        signals = pd.DataFrame({
+            "entry_long": [True, False, False],
+            "exit_long": [False, False, False],
+            "stop_dist": [0.02, float("nan"), float("nan")],
+        }, index=df.index)
+        strat = _StubStrategy(signals, name="tightstop")
+        slip = TIER_BPS[3] / 10_000
+
+        entry = 100.0 * (1 + slip)
+        expected_exit = 100.5 * (1 - slip)   # eod close, NOT a phantom gap_stop
+
+        trades = run_signal_backtest(strat, df, symbol="X", slippage_bps=TIER_BPS[3])
+        assert len(trades) == 1
+        t = trades[0]
+        assert t.exit_reason == "eod"               # survived the entry bar
+        assert t.exit_reason != "gap_stop"
+        assert t.entry_date == df.index[1]
+        assert t.exit_date == df.index[2]
+        assert t.entry == pytest.approx(entry, rel=1e-9)
+        assert t.exit == pytest.approx(expected_exit, rel=1e-9)
+
+    def test_legitimate_gap_stop_on_later_bar_still_fires(self):
+        # Guard must NOT disable real gap_stops on non-entry bars.
+        df = _make_df(
+            opens=[104.0, 105.0, 99.0],
+            highs=[106.0, 106.0, 100.0],
+            lows=[103.0, 104.0, 98.5],
+            closes=[105.0, 104.5, 99.5],
+        )
+        signals = pd.DataFrame({
+            "entry_long": [True, False, False],
+            "exit_long": [False, False, False],
+            "stop_dist": [5.0, float("nan"), float("nan")],
+        }, index=df.index)
+        strat = _StubStrategy(signals, name="realgap")
+        slip = TIER_BPS[3] / 10_000
+        # entry bar 1: open=105*(1.0005)=105.0525, stop=100.0525; bar1 survives.
+        # bar 2 (NOT entry bar): open=99.0 <= 100.0525 -> real gap_stop.
+        trades = run_signal_backtest(strat, df, symbol="X", slippage_bps=TIER_BPS[3])
+        assert len(trades) == 1
+        assert trades[0].exit_reason == "gap_stop"
+        assert trades[0].exit == pytest.approx(99.0 * (1 - slip), rel=1e-9)
