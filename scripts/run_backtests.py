@@ -2,9 +2,11 @@ import argparse
 import json
 import logging
 from pathlib import Path
+import time
+import subprocess
 import pandas as pd
 from stockslab.strategies import load_all
-from stockslab import data, engine, metrics
+from stockslab import data, engine, metrics, result_contract
 from stockslab.strategies.base import SignalStrategy, RotationStrategy
 
 def main():
@@ -37,6 +39,13 @@ def main():
             syms.append("QQQ")
         if isinstance(strat, RotationStrategy) and "SPY" not in syms:
             syms.append("SPY")
+
+        # Only load symbols that actually exist in the cache
+        valid_syms = []
+        for s in syms:
+            if Path(f"data/{strat.timeframe}/{s}.parquet").exists():
+                valid_syms.append(s)
+        syms = valid_syms
 
         try:
             panel = data.load_panel(syms, strat.timeframe)
@@ -75,26 +84,25 @@ def main():
         passed, reasons = metrics.phase1_gate(summary)
         print(f"[{strat_name}] Split: {args.split} | PF: {summary['pf']:.2f} | N: {summary['n']} | Gate Passed: {passed}")
         
-        out_json = Path("results") / f"{strat_name}_{args.split}.json"
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+        run_id = f"{strat_name}_{args.split}_{commit[:8]}_{int(time.time())}"
+        
+        run_metadata = {
+            "run_id": run_id,
+            "repo_commit": commit,
+            "interval": strat.timeframe,
+            "split_label": args.split
+        }
+        
+        contract_res = result_contract.build_backtest_result(strat, sliced_panel, trades, run_metadata)
+        
+        out_json = Path("results") / f"{run_id}.json"
         with open(out_json, "w") as f:
-            json.dump(summary, f, indent=2)
+            json.dump(contract_res, f, indent=2)
             
         out_csv = Path("results") / f"{strat_name}_{args.split}_trades.csv"
-        trade_dicts = []
-        for t in trades:
-            td = {
-                "symbol": t.symbol,
-                "entry_date": t.entry_date.isoformat(),
-                "exit_date": t.exit_date.isoformat(),
-                "entry": t.entry,
-                "exit": t.exit,
-                "shares": t.shares,
-                "r_multiple": t.r_multiple,
-                "pct_return": t.pct_return,
-                "exit_reason": t.exit_reason
-            }
-            trade_dicts.append(td)
-        pd.DataFrame(trade_dicts).to_csv(out_csv, index=False)
+        if contract_res.get("trades"):
+            pd.DataFrame(contract_res["trades"]).to_csv(out_csv, index=False)
 
 if __name__ == "__main__":
     main()
