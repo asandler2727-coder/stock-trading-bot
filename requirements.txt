@@ -4,3 +4,4 @@ pyarrow
 yfinance>=0.2.50
 pytest
 matplotlib
+jsonschema
