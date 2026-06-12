@@ -55,21 +55,60 @@ Human (Austin) is the courier — paste agent output back into this file when th
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** IDLE — dashboard complete
+**Status:** NEW TASK — strategy review + ema_pullback param audit
 
 ### Done
-- Reviewed result contract v0.2.0
-- Confirmed 7 requests were incorporated
-- Signed off on 3 open judgment calls
-- Built `docs/dashboard_results.html` as a standalone Chart.js dashboard
-- Verified via local server at `http://localhost:8080/docs/dashboard_results.html`: 12 gate rows, 9 charts, no browser console errors, mobile-width no page overflow
+- Reviewed result contract v0.2.0; signed off on 7 requests + 3 judgment calls
+- Built `docs/dashboard_results.html` (12 gate rows, equity curves, exit breakdowns, robustness charts)
 
 ### Open
-- [x] **Build results dashboard** — see task below
+- [ ] **Strategy review** — see task below
 
 ### Issues / notes
-- Page uses runtime `fetch()`, so open it through a local server from the project root: `python3 -m http.server 8080`
-- Existing unrelated workspace changes were left alone, including AGY lane strategy/test/report work
+- Dashboard note: `results/robustness_ema_pullback.json` now exists (ema_pullback is a 5th gate passer). The dashboard was built for 4 survivors — add ema_pullback to the equity curves and robustness chart sections.
+- Dashboard `fetch()` — serve from project root: `python3 -m http.server 8080`
+
+### Task: Strategy code review + ema_pullback param audit
+
+Two sub-tasks. Read Claude's Phase D summary in this file first for context.
+
+---
+
+#### Sub-task 1: ema_pullback param wiring audit
+
+**Context:** Claude ran a robustness sweep of ema_pullback. `ema_fast` (20→16 and 20→24) and `ema_mid` (50→40 and 50→60) both returned **identical PF=1.3872 and n=5423** — no change at all. This is suspicious: if those params were wired into indicator calculations, different values should produce different signal counts.
+
+**Files:**
+- `src/stockslab/strategies/ema_pullback.py` — strategy implementation
+- `src/stockslab/indicators.py` — indicator implementations
+
+**Your task:**
+1. Read `ema_pullback.py` in full. Check how the strategy reads `self.params['ema_fast']` and `self.params['ema_mid']`
+2. Check whether the signal generation code uses these param values when computing the EMAs, or if the period is hardcoded
+3. If hardcoded: fix so params flow through. If already wired: explain why the sweep returned identical results (possible: the param changes don't affect the specific condition used after AGY's fix)
+4. Write findings here — 2-3 sentences: what you found, whether it needs a fix, and if so what the fix is
+
+---
+
+#### Sub-task 2: Strategy spec review (all 5 gate passers)
+
+**Context:** We have 5 strategies that pass the IS PF > 1.3 / N ≥ 500 / OOS PF > 1.15 gate. Claude's Gemini auditors verified logic for 4 of them (see `docs/REPORT_D2.md`); ema_pullback was not audited by D2 (it was failing at audit time).
+
+**Spec source:** `docs/superpowers/plans/2026-06-12-two-track-stock-research.md`
+
+**Your task:** For each of the 5 gate passers, read the implementation and compare to the spec rule. Flag any deviations. Format your findings as a table:
+
+| Strategy | Spec match? | Deviations / notes |
+|---|---|---|
+| donchian_breakout | | |
+| high52_breakout | | |
+| ema_pullback | | |
+| xsec_momentum | | |
+| bb_squeeze_breakout | | |
+
+Focus on: entry conditions, exit conditions, stop calculation, time stop. You don't need to re-run anything — this is a read-only code review.
+
+**When done:** write your table and ema_pullback param findings in this section, then update Status to IDLE.
 
 ### Task: Build results dashboard (`docs/dashboard_results.html`)
 
