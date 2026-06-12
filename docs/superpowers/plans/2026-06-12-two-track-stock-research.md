@@ -213,7 +213,7 @@ Every strategy: create `src/stockslab/strategies/<name>.py` + `tests/test_strat_
 Exact rules (params in `self.params`, defaults shown — these are the ±20% sensitivity knobs):
 
 1. **donchian_breakout** (1d, all): entry when `close > donchian_high(55).shift(1)`; stop_dist `2*atr(14)`; trail_atr_mult 3; exit when `close < donchian_low(20).shift(1)`.
-2. **ema_pullback** (1d, all): uptrend `ema50>ema200 and close>ema50`; entry when uptrend and `low <= ema20` and `rsi(14) < 40`; stop_dist `1.5*atr(14)`; target_r 2.0; time_stop_bars 15.
+2. **rsi_dip_uptrend** (1d, all): uptrend `close > ema200`; entry when uptrend and `rsi(14) < 40`; stop_dist `1.5*atr(14)`; target_r 2.0; time_stop_bars 15.
 3. **rsi2_meanrev** (1d, stocks+SPY/QQQ): entry `close>sma200 and rsi(2)<10`; exit `rsi(2)>70 or close>sma5`; stop_dist `2.5*atr(14)`; time_stop_bars 10.
 4. **bb_squeeze_breakout** (1d, all): squeeze = `bb_width(20,2)` in lowest 15th pctile of trailing 252; entry when squeeze yesterday and `close>bb_upper`; stop_dist `2*atr(14)`; trail 2.5.
 5. **xsec_momentum** (1d rotation, stocks): every Monday, rank by `close.shift(21)/close.shift(252)-1` (12-1 momentum), hold top 10; only when SPY>sma200 else empty.

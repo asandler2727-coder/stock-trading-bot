@@ -103,8 +103,7 @@ not gating (per standing decision). No funding-rate-style strategies (N/A for st
 
 Swing track (daily bars):
 1. `donchian_breakout` — 55d-high entry, ATR trail / 20d-low exit (turtle-style).
-2. `ema_pullback` — port of mm_steady: EMA50>EMA200 uptrend, pullback toward EMA20
-   with RSI<40, ATR stop, 2R target.
+2. `rsi_dip_uptrend` — RSI<40 dip while close remains above EMA200, ATR stop, 2R target.
 3. `rsi2_meanrev` — Connors: close>SMA200, buy RSI(2)<10, exit RSI(2)>70 or close>SMA5.
 4. `bb_squeeze_breakout` — BB-width percentile squeeze, trade the breakout direction.
 5. `xsec_momentum` — weekly rotation, top-k stocks by 12-1 momentum, regime filter.

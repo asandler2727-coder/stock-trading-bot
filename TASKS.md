@@ -3,8 +3,7 @@
 ## Active
 
 - [ ] **Build paper-trade harness** — donchian_breakout + high52_breakout APPROVED GO (2026-06-12); greenfield: position sizing (donchian wants ≤0.5% risk — 71.6% max DD at 1%), result-contract wiring, monitoring
-- [ ] **Codex: ema_pullback → RSI-dip rework** — accept as RSI-dip; rename `rsi_dip_uptrend`, drop dead ema_fast/ema_mid params, rewrite vacuous test, regenerate results, update spec+dashboard (full spec in AGENT_STATUS.md Codex section)
-- [ ] **Claude: confirm ema_pullback OOS** — after the rework, verify IS reproduces (PF≈1.387/n≈5423) + OOS holds ≈1.29 before it re-enters the ranking
+- [ ] **AGY: independent verification battery** (donchian + high52) — read-only; recompute PF/n/wr from raw trade ledgers, causality + data-integrity + penny-stock checks → `docs/REPORT_AGY_verification.md` (running)
 
 ## Someday
 
@@ -28,3 +27,5 @@
 - [x] ~~AGY fix ema_pullback bug~~ (2026-06-12) — fixed close>ema50 condition; new IS n=5423 PF=1.387
 - [x] ~~AGY investigate levered_etf_meanrev anomaly~~ (2026-06-12) — QQQ filter confirmed working; IS bad years (2018/2019) explain gap
 - [x] ~~Robustness sweep for ema_pullback~~ (2026-06-12) — results/robustness_ema_pullback.json; REVIEW verdict
+- [x] ~~Codex: ema_pullback → RSI-dip rework~~ (2026-06-12) — renamed `rsi_dip_uptrend`; IS PF=1.387247/N=5423; OOS PF=1.290191/N=1649; tests green
+- [x] ~~Claude: verify rsi_dip_uptrend rework~~ (2026-06-12) — independent rerun: IS 1.3872/5423 (exact), OOS 1.2902/1649 (holds), 262 tests green, rename clean repo-wide

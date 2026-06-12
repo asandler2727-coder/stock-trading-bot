@@ -495,19 +495,19 @@
     const strategies = [
       'bb_squeeze_breakout',
       'donchian_breakout',
-      'ema_pullback',
       'gap_fade',
       'high52_breakout',
       'intraday_momentum',
       'levered_etf_meanrev',
       'orb',
+      'rsi_dip_uptrend',
       'rsi2_meanrev',
       'sector_rotation',
       'vwap_reclaim',
       'xsec_momentum'
     ];
 
-    const survivors = ['xsec_momentum', 'donchian_breakout', 'high52_breakout', 'bb_squeeze_breakout'];
+    const survivors = ['xsec_momentum', 'donchian_breakout', 'high52_breakout', 'rsi_dip_uptrend', 'bb_squeeze_breakout'];
     const exitReasons = ['stop', 'signal', 'gap_stop', 'target', 'time', 'session', 'eod', 'rotation'];
     const resultRoot = location.pathname.includes('/docs/') ? '../results' : 'results';
     const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });

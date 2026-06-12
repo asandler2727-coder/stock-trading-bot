@@ -16,9 +16,27 @@ def _make_ohlcv(n=400, seed=7):
     )
 
 
+def _make_entry_ohlcv():
+    """Trending fixture with deliberate RSI dips after EMA200 is warm."""
+    n = 360
+    idx = pd.date_range("2015-01-01", periods=n, freq="B", name="date")
+    close = 100.0 + np.arange(n) * 0.16
+    for start in [230, 280, 325]:
+        close[start:start + 4] -= np.array([2.0, 4.0, 6.0, 7.0])
+    close = pd.Series(close, index=idx)
+    open_ = close.shift(1).fillna(close.iloc[0]) + 0.05
+    high = np.maximum(open_, close) + 0.35
+    low = np.minimum(open_, close) - 0.35
+    vol = np.full(n, 2_000_000.0)
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": vol},
+        index=idx,
+    )
+
+
 def _strat():
-    from stockslab.strategies.ema_pullback import EmaPullback
-    return EmaPullback()
+    from stockslab.strategies.rsi_dip_uptrend import RsiDipUptrend
+    return RsiDipUptrend()
 
 
 class TestCausality:
@@ -36,28 +54,25 @@ class TestCausality:
 
 
 class TestEntryRules:
-    def test_entry_requires_all_three_conditions(self):
-        """entry_long only fires when uptrend AND low<=ema20 AND rsi14<40."""
-        df = _make_ohlcv(400)
+    def test_entry_requires_uptrend_and_rsi_dip(self):
+        """entry_long fires only when close>ema200 and rsi14<40."""
+        df = _make_entry_ohlcv()
         strat = _strat()
         sigs = strat.generate(df)
-        from stockslab.indicators import ema, rsi
+        from stockslab.indicators import atr as calc_atr, ema, rsi
 
-        ema20 = ema(df["close"], 20)
-        ema50 = ema(df["close"], 50)
         ema200 = ema(df["close"], 200)
         rsi14 = rsi(df["close"], 14)
+        atr14 = calc_atr(df, 14)
 
-        uptrend = (ema50 > ema200) & (df["close"] > ema50)
-        pullback = df["low"] <= ema20
+        uptrend = df["close"] > ema200
         oversold = rsi14 < 40
 
-        expected = uptrend & pullback & oversold
-        # Expected may be NaN-masked; ignore pre-warmup
-        warm_idx = df.index[expected.notna() & uptrend.notna()]
+        expected = uptrend & oversold & atr14.notna()
+        assert expected.any(), "fixture must generate real RSI-dip entries"
         pd.testing.assert_series_equal(
-            sigs["entry_long"].loc[warm_idx],
-            expected.loc[warm_idx].astype(bool),
+            sigs["entry_long"],
+            expected.astype(bool),
             check_names=False,
         )
 
@@ -69,7 +84,7 @@ class TestEntryRules:
         assert not sigs["entry_long"].iloc[:200].any()
 
     def test_exit_long_always_false(self):
-        """ema_pullback has no exit_long signal (exits via target_r / time_stop)."""
+        """rsi_dip_uptrend has no exit_long signal (exits via target_r / time_stop)."""
         df = _make_ohlcv(400)
         strat = _strat()
         sigs = strat.generate(df)

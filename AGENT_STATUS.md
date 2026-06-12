@@ -18,6 +18,7 @@ Human (Austin) is the courier — paste agent output back into this file when th
 - Ran robustness sweep for ema_pullback → `results/robustness_ema_pullback.json`
 - Diagnosed ema_pullback "param bug" → it's spec drift, not wiring (proof in `/tmp/diag_ema.py`); handed Codex a sharpened read-only task
 - Digested Codex spec review: donchian + high52 spec-clean (gate CLEARED); ema_pullback drift confirmed + vacuous test found; xsec off-by-one + holiday bugs confirmed (already known)
+- **Engine checkpoint — VERIFIED Codex's `rsi_dip_uptrend` rework:** independently reran it — IS reproduces exactly (PF 1.3872 / n 5423), OOS holds (PF 1.2902 / n 1649), my numbers match Codex's to the digit; new test passes + Codex's full suite is 262 green; rename clean repo-wide. Edge survived → re-enters ranking at #3.
 
 ### Phase D results
 
@@ -28,7 +29,7 @@ Human (Austin) is the courier — paste agent output back into this file when th
 | xsec_momentum | 3.326 | 651 | 2.212 | — | REVIEW (regime + concentration) |
 | donchian_breakout | 1.624 | 2698 | 1.361 | 1.50 | CONFIRM |
 | high52_breakout | 1.515 | 812 | 1.322 | — | CONFIRM |
-| ema_pullback | 1.387 | 5423 | 1.290 | 1.28 | REVIEW (marginal robustness) |
+| rsi_dip_uptrend (was ema_pullback) | 1.387 | 5423 | 1.290 | 1.28 | ✅ REWORKED — RSI-dip; edge Claude-verified |
 | bb_squeeze_breakout | 1.313 | 1471 | 1.171 | — | REVIEW (marginal edge) |
 
 **ema_pullback details:**
@@ -47,7 +48,7 @@ Human (Austin) is the courier — paste agent output back into this file when th
 **Paper-trade ranking:**
 1. **donchian_breakout** — highest confidence; 2698 trades; simplest logic; cleanest audit
 2. **high52_breakout** — clean audit; strong diversification
-3. **ema_pullback** — DEMOTE pending decision. Large trade count (5423) but it is now an RSI-dip strategy, not the spec'd pullback (2 of its 3 EMA conditions are inert). Decide: (a) accept + re-spec/rename + drop dead ema_fast/ema_mid params, or (b) redesign to give the pullback real bite, or (c) park it. Its robustness evidence is partly illusory (see details above).
+3. **rsi_dip_uptrend** (was ema_pullback) — ✅ REWORKED + VERIFIED. Accepted as the RSI-dip strategy it is; Codex renamed + simplified to `close>ema200 & rsi(14)<40`, Claude confirmed IS reproduces exactly (PF 1.387 / n 5423) and OOS holds (PF 1.290 / n 1649). Real robustness rests on rsi_thresh + ema_slow (dropped ema_fast/ema_mid were inert). Largest trade count of the set (5423).
 4. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
 5. **bb_squeeze_breakout** — most marginal; lowest priority
 
@@ -56,6 +57,7 @@ Human (Austin) is the courier — paste agent output back into this file when th
 - [ ] **Build paper-trade harness** for donchian + high52: position sizing (donchian needs ≤0.5% risk), result-contract wiring, monitoring. Scope deliberately — greenfield.
 - [x] ~~Codex task: verify ema_pullback params wired~~ — RESOLVED by Claude: wired correctly, but conditions inert (see details). Now a strategy-design decision, not a wiring fix.
 - [x] ~~ema_pullback design decision~~ — **DECIDED (Austin): accept as RSI-dip.** Codex task issued: rename/re-spec to reflect it's an RSI-dip-in-uptrend strategy, drop dead ema_fast/ema_mid params, rewrite the vacuous test with entry-generating data.
+- [x] ~~ema_pullback → rsi_dip_uptrend rework + OOS confirm~~ — **DONE + Claude-VERIFIED.** Codex shipped the rename/refactor; Claude reran (IS 1.3872/5423 exact, OOS 1.2902/1649 holds, 262 tests green). Strategy is real, just honestly named now.
 - [ ] xsec_momentum (if ever promoted): fix confirmed off-by-one momentum index + Monday-holiday rebalance fallback. Not blocking — it's ranked #4, needs regime/sizing controls first.
 - [ ] levered_etf_meanrev: consider re-evaluation with longer IS window (low priority)
 
@@ -64,43 +66,39 @@ Human (Austin) is the courier — paste agent output back into this file when th
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** NEW TASK — ema_pullback → RSI-dip rework
+**Status:** IDLE
 
 ### Done
 - Reviewed result contract v0.2.0; signed off on 7 requests + 3 judgment calls
 - Built `docs/dashboard_results.html` (12 gate rows, equity curves, exit breakdowns, robustness charts)
 - Completed read-only spec-vs-implementation review of the 5 current gate passers
 - Confirmed Claude's `ema_pullback` param diagnosis with `/tmp/diag_ema.py`
+- Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- [ ] **ema_pullback → RSI-dip rework** (Austin decided: accept as RSI-dip) — see task below
+- (None)
 
-### Task: ema_pullback → RSI-dip rework
+### Rework results
 
-Austin's decision: accept the strategy as what it actually is (RSI-dip-in-uptrend), not the spec'd EMA pullback. Engine (Claude) decided the canonical form and the verify step; you implement.
-
-**Canonical form (effective rule):** `entry_long = (close > ema200) & (rsi(rsi_n) < rsi_thresh) & atr.notna()`. Remove the two inert conditions (`low <= ema20`, `ema50 > ema200`) entirely — they were provably zero-delta on IS, so removing them keeps IS behavior identical while making the code honest about what's traded. Keep: `ema_slow`/ema200 trend gate, `rsi_n`, `rsi_thresh`, `stop_mult`, `atr_n`, target_r=2.0, time_stop_bars=15.
-
-**Steps:**
-1. **Rename** the strategy `name` (Austin wants the rename). Suggest `rsi_dip_uptrend` — confirm with Austin if you prefer another. ⚠️ This cascades: registry key, `results/{name}_*.json` + `_trades.csv`, `results/robustness_{name}.json`, the dashboard's strategy list, the spec doc, and the test filename. Do it as ONE atomic change.
-2. **Edit** `src/stockslab/strategies/ema_pullback.py` → new module name: drop `ema_fast`/`ema_mid` from params, remove the inert conditions, implement the canonical form above.
-3. **Rewrite** the test (currently `tests/test_strat_ema_pullback.py`): the entry-rule test is vacuous (synthetic random walk → 0 entries). Use a trending fixture that actually generates entries; assert entry == `close>ema200 & rsi<rsi_thresh`. Keep the causality / stop_dist=1.5×ATR / exit-always-false / output-columns tests.
-4. **Re-run** `.venv/bin/python scripts/run_backtests.py --strategies <newname>` and `scripts/robustness.py`. Regenerate the canonical result JSONs + trade CSVs.
-5. **Update** the spec doc (`docs/superpowers/plans/2026-06-12-two-track-stock-research.md` line 216) to describe the RSI-dip rule, and add the renamed strategy to the dashboard.
-
-**Verify + hand back to Claude (engine):** IS should reproduce **PF≈1.387, n≈5423** exactly (inert-condition removal is zero-delta on IS). Report the new **OOS** PF/n — if OOS shifts materially from 1.290/prior, that's signal about the removed conditions; flag it. Do NOT treat the strategy as paper-trade-ready — Claude confirms the edge survived before it re-enters the ranking.
-
-**When done:** write results in this section, set Status to IDLE.
+- New strategy name: `rsi_dip_uptrend`
+- Canonical rule now implemented: `entry_long = (close > ema200) & (rsi(rsi_n) < rsi_thresh) & atr.notna()`
+- IS reproduced: PF `1.3872470088066529`, N `5423`
+- OOS result: PF `1.2901913080388698`, N `1649`
+- OOS did not materially shift from prior `~1.290`; the removed conditions were zero-delta as expected
+- Robustness regenerated without dead EMA knobs; 2x slippage PF `1.3273892008693449`, min non-slippage robustness PF `1.2845276326066997`
+- Full test suite: `262 passed`
+- Dashboard verified at `http://localhost:8080/docs/dashboard_results.html`: 12 rows, 11 charts, `Rsi Dip Uptrend` row present, no browser console errors, no mobile page overflow
+- Not paper-trade-ready by Codex decision; hand back to Claude to confirm the edge survived before re-entering the ranking
 
 ### Issues / notes
-- Dashboard note: `results/robustness_ema_pullback.json` now exists (ema_pullback is a 5th gate passer). The dashboard was built for 4 survivors — add ema_pullback to the equity curves and robustness chart sections.
 - Dashboard `fetch()` — serve from project root: `python3 -m http.server 8080`
+- Retired generated `ema_pullback` result artifacts were removed so scans/reporting use only `rsi_dip_uptrend`
 
-### Strategy review findings
+### Historical strategy review findings (pre-rename)
 
 Sub-task 1 confirmation: I agree with Claude. `ema_fast`, `ema_mid`, and `ema_slow` are wired into the EMA calls, so this is not a param plumbing bug. The diagnostic reproduced exactly: base signals 15,354; dropping `low <= ema20` changed 0 signals; dropping `ema50 > ema200` changed 0 signals; `ema_fast` 16/20/24 and `ema_mid` 40/50/60 all produced 15,354 signal bars.
 
-Recommendation: Do not paper-trade `ema_pullback` under the current name/spec until Austin makes the design call. Either accept it as an RSI-dip-in-long-uptrend strategy and rename/drop dead EMA params, or redesign the pullback so `low <= ema20` and the EMA stack actually constrain entries.
+Resolution: Austin chose the accept-as-RSI-dip path. The implementation is now `rsi_dip_uptrend`; this block is preserved as the review trail that led to the rename.
 
 | Strategy | Spec match? | Deviations / notes |
 |---|---|---|
@@ -120,7 +118,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 - `results/{strategy}_IS_trades.csv` — cols: `symbol,entry_date,exit_date,entry,exit,shares,r_multiple,pct_return,exit_reason`
 - `results/robustness_{strategy}.json` — exists for 4 survivors only; keys: `param`, `value`, `pf`, `n`
 
-**The 12 strategies:** `bb_squeeze_breakout`, `donchian_breakout`, `ema_pullback`, `gap_fade`, `high52_breakout`, `intraday_momentum`, `levered_etf_meanrev`, `orb`, `rsi2_meanrev`, `sector_rotation`, `vwap_reclaim`, `xsec_momentum`
+**The 12 strategies:** `bb_squeeze_breakout`, `donchian_breakout`, `rsi_dip_uptrend`, `gap_fade`, `high52_breakout`, `intraday_momentum`, `levered_etf_meanrev`, `orb`, `rsi2_meanrev`, `sector_rotation`, `vwap_reclaim`, `xsec_momentum`
 
 **Gate thresholds:** IS PF > 1.3 AND N >= 500 AND OOS PF > 1.15
 
@@ -128,11 +126,11 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 
 1. **Gate summary table** — one row per strategy. Columns: Strategy, IS PF, IS N, OOS PF, Status (PASS/FAIL, colour-coded green/red). Sort by IS PF descending. Clicking a row expands the detail panel below.
 
-2. **Equity curves** (survivors only: xsec_momentum, donchian_breakout, high52_breakout, bb_squeeze_breakout) — load trades CSV, compute cumulative sum of r_multiple sorted by exit_date, plot as line chart with Chart.js. One chart per strategy, all on same page.
+2. **Equity curves** (survivors only: xsec_momentum, donchian_breakout, high52_breakout, rsi_dip_uptrend, bb_squeeze_breakout) — load trades CSV, compute cumulative sum of r_multiple sorted by exit_date, plot as line chart with Chart.js. One chart per strategy, all on same page.
 
 3. **Exit reason breakdown** — stacked bar chart per strategy, using `exit_reason_counts` from the IS JSON. Reasons: stop, signal, gap_stop, target, time, session, eod.
 
-4. **Robustness sensitivity** (4 survivors only) — for each `robustness_{strategy}.json`, plot a bar chart: x=param+value label, y=PF. Draw a horizontal dashed line at PF=1.3 (gate floor).
+4. **Robustness sensitivity** (5 survivors only) — for each `robustness_{strategy}.json`, plot a bar chart: x=param+value label, y=PF. Draw a horizontal dashed line at PF=1.3 (gate floor).
 
 **Implementation notes:**
 - Load JSON/CSV with `fetch()` at runtime — the file must be opened via a local HTTP server or `file://` with CORS disabled. Add a note at the top of the page: "Serve with: `python3 -m http.server 8080` from the project root"
@@ -147,7 +145,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 ## AGY — mechanical lane
 
 **Last updated:** 2026-06-12
-**Status:** TASKS READY
+**Status:** NEW TASK — independent verification of paper-trade candidates (donchian + high52)
 
 ### Done
 - Implemented result emitter (9774a2b)
@@ -161,9 +159,33 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
   - **QQQ filter verdict**: The filter is working perfectly. There were exactly 0 trades in 2022 because QQQ was below its 200-day SMA. This entirely bypassed the 2022 bear market, which is why OOS outperformed IS.
 
 ### Open
-- (None)
+- [ ] **Independent verification battery** (donchian + high52) — extra eyes before paper trade; see task below
 
-### Task 1: Fix `ema_pullback` (only 15 IS trades — signal bug)
+### Task: Independent verification of paper-trade candidates (READ-ONLY)
+
+**Why:** `donchian_breakout` + `high52_breakout` are APPROVED GO for paper trading. Before real-money-adjacent use we want an independent mechanical re-check — Codex reviewed spec-vs-code (logic) and Claude did the strategy diagnosis, but **nobody has independently recomputed the headline numbers from the raw trade ledgers or audited the underlying data.** That's the gap you fill.
+
+**Hard constraints:**
+- **READ-ONLY.** Recompute and report. Do NOT modify result JSONs, trade CSVs, or `src/`.
+- **Scope = `donchian_breakout` and `high52_breakout` ONLY.** Do NOT touch anything `ema_pullback` — Codex is actively reworking it into `rsi_dip_uptrend`; those files are in flux.
+- Use `.venv/bin/python`. You are reporting facts, not making the go/no-go call (that's Claude's).
+
+**Checks — report PASS or the specific anomaly (with numbers) for each:**
+
+1. **Recompute headline metrics from raw ledgers.** For each strategy × {IS, OOS}, load `results/{strat}_{IS,OOS}_trades.csv` (cols: `symbol,entry_date,exit_date,entry,exit,shares,r_multiple,pct_return,exit_reason`). Compute and compare to `results/{strat}_{IS,OOS}.json`:
+   - **PF three ways:** (a) dollar P&L `(exit-entry)*shares` → `sum(wins)/abs(sum(losses))`; (b) from `r_multiple` → `sum(r>0)/abs(sum(r<0))`; (c) the JSON `pf`. Report all three. If (a) differs from (c), note whether `r_multiple`/`pct_return` look net or gross of costs (the engine applies per-tier bps slippage) — don't call it a bug, just report which definition the JSON matches.
+   - `n` (rows vs JSON `n`), win rate (`count(r>0)/n` vs `wr`), `avg_r` (mean `r_multiple` vs `avg_r`).
+2. **Causality / lookahead (critical).** Run `.venv/bin/python -m pytest tests/ -k "donchian or high52" -q`. Then spot-check 3 traded symbols: confirm `strat.generate(df.iloc[:k])["entry_long"]` equals `strat.generate(df)["entry_long"].iloc[:k]` for a few cutoffs k. Any mismatch = lookahead = critical, flag loudly.
+3. **Trade-ledger sanity.** Per strategy/split: every `exit_date >= entry_date`; no duplicate `(symbol, entry_date)`; JSON `exit_reason_counts` sums to `n`; no NaN in `entry`/`exit`/`r_multiple`.
+4. **Data integrity** on the symbols these two strategies actually trade. Scan `data/1d/{symbol}.parquet`: NaNs, duplicate / non-monotonic dates, zero/negative OHLC, any single-bar move >50% (possible unadjusted split). Report counts by symbol.
+5. **Penny-stock artifact (high52).** D2 noted ~25 high52 trades with entry < $5. Quantify across IS+OOS: how many trades have `entry < 5`, and what % of total `r_multiple` do they contribute? (Tells us if the edge leans on illiquid sub-$5 names.)
+6. **Doc cross-check.** Confirm the donchian + high52 PF/n in `AGENT_STATUS.md` (Claude table) and `docs/REPORT_D2.md` match the JSONs. Report any mismatch.
+
+**Output:** write findings to `docs/REPORT_AGY_verification.md` — one section per check, PASS or anomaly with numbers. Then update this AGY section with a 3-4 line summary + set Status to IDLE.
+
+---
+
+### Task 1 (DONE): Fix `ema_pullback` (only 15 IS trades — signal bug)
 
 **Context:** `ema_pullback` produced only 15 trades over 11 years on 100+ stocks. This is almost certainly a bug — the spec says `rsi(14) < 40` which should fire regularly in an uptrend universe.
 
