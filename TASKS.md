@@ -2,19 +2,21 @@
 
 ## Active
 
-- [ ] **Paper-trade go/no-go** — donchian_breakout + high52_breakout are CONFIRM; decide on launch
-- [ ] **Codex: verify ema_pullback param wiring** — ema_fast/ema_mid sweeps return identical PF; check that params flow into indicator calls in `src/stockslab/strategies/ema_pullback.py`
-
-## Waiting On
-
-- [ ] **Codex dashboard** — `docs/dashboard_results.html` in progress (note: 5 survivors now, robustness file added for ema_pullback)
+- [ ] **Build paper-trade harness** — donchian_breakout + high52_breakout APPROVED GO (2026-06-12); greenfield: position sizing (donchian wants ≤0.5% risk — 71.6% max DD at 1%), result-contract wiring, monitoring
+- [ ] **Codex: ema_pullback → RSI-dip rework** — accept as RSI-dip; rename `rsi_dip_uptrend`, drop dead ema_fast/ema_mid params, rewrite vacuous test, regenerate results, update spec+dashboard (full spec in AGENT_STATUS.md Codex section)
+- [ ] **Claude: confirm ema_pullback OOS** — after the rework, verify IS reproduces (PF≈1.387/n≈5423) + OOS holds ≈1.29 before it re-enters the ranking
 
 ## Someday
 
 - [ ] levered_etf_meanrev re-evaluation with longer IS window
+- [ ] xsec_momentum fixes (off-by-one momentum index, Monday-holiday rebalance) — only if promoted; needs regime/sizing first
 
 ## Done
 
+- [x] ~~Paper-trade go/no-go~~ (2026-06-12) — APPROVED GO: donchian_breakout + high52_breakout (spec-clean, robust IS+OOS+2× slippage)
+- [x] ~~Diagnose ema_pullback param mystery~~ (2026-06-12) — NOT a wiring bug; spec drift (pullback + ema50>ema200 conditions inert after AGY's fix); Austin chose accept-as-RSI-dip
+- [x] ~~Codex strategy spec review (5 gate passers)~~ (2026-06-12) — donchian/high52 clean; ema_pullback drift confirmed + vacuous test found; xsec bugs confirmed
+- [x] ~~Codex build results dashboard~~ (2026-06-12) — docs/dashboard_results.html (12 rows: gate table, equity, exits, robustness)
 - [x] ~~Confirm intraday bar-label convention (Q4)~~ (2026-06-12) — BAR-START; 09:30 = open time
 - [x] ~~Commit contracts/~~ (2026-06-12) — committed 121eb96
 - [x] ~~Build strategy 11: vwap_reclaim~~ (2026-06-12) — committed 9808cb9

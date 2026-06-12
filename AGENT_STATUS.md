@@ -16,6 +16,8 @@ Human (Austin) is the courier — paste agent output back into this file when th
 - Phase D Kanban audits (D1 ×4, D2 synthesis) — all done; `docs/REPORT_D2.md` written
 - Digested AGY findings; updated canonical `ema_pullback_IS.json` / `_OOS.json` from new trade CSVs
 - Ran robustness sweep for ema_pullback → `results/robustness_ema_pullback.json`
+- Diagnosed ema_pullback "param bug" → it's spec drift, not wiring (proof in `/tmp/diag_ema.py`); handed Codex a sharpened read-only task
+- Digested Codex spec review: donchian + high52 spec-clean (gate CLEARED); ema_pullback drift confirmed + vacuous test found; xsec off-by-one + holiday bugs confirmed (already known)
 
 ### Phase D results
 
@@ -31,8 +33,12 @@ Human (Austin) is the courier — paste agent output back into this file when th
 
 **ema_pullback details:**
 - Bug: `close > ema50` was mutually exclusive with `rsi(14) < 40` — fixed by AGY (now uses `close > ema200`)
-- Robustness: all param sweeps hold PF ≥ 1.28. At 2× slippage: PF=1.327 (barely holds)
-- Code smell: ema_fast/ema_mid sweeps return identical PF — params may not be wired into indicator calls; Codex should verify
+- Robustness: param sweeps hold PF ≥ 1.28. At 2× slippage: PF=1.327 (barely holds). **Caveat: only 5 of 7 knobs were actually tested** — see inertness finding.
+- **RESOLVED — the ema_fast/ema_mid identical-PF "smell" is NOT a wiring bug.** Params are correctly wired (`ema_fast`→ema20 line 27, `ema_mid`→ema50 line 28); `ema_slow`→ema200 uses the same pattern and *does* move the sweep, proving overrides reach `generate()`. Diagnostic (`/tmp/diag_ema.py`, full IS universe) shows **both conditions those params feed are inert** — deltas exactly 0:
+  - Dropping `low <= ema20` (the namesake *pullback*) changes 0 signals → implied by `rsi(14) < 40` on 100% of qualifying bars. `ema_fast` is a dead knob.
+  - Dropping `(ema50 > ema200)` changes 0 signals → implied by `close > ema200`. `ema_mid` is a dead knob.
+- **Spec drift (matters for go/no-go):** AGY's fix over-relaxed. The strategy is now operationally identical to `entry = (close > ema200) & (rsi(14) < 40)` — an RSI-dip-in-long-uptrend play, *not* the spec's EMA-stacked pullback (spec line 216: `uptrend = ema50>ema200 and close>ema50`). Real param sensitivity lives in `rsi_thresh` (32→PF 1.527/n 974; 48→PF 1.283/n 13199) and `ema_slow`. The "robustness holds" claim is weaker than it reads: 2 of 7 sweeps were no-ops, so they demonstrate nothing.
+- **Stale/vacuous test (Codex flagged, Claude verified):** `tests/test_strat_ema_pullback.py:51` still encodes the old spec `close > ema50`. Suite is GREEN, but `test_entry_requires_all_three_conditions` passes *vacuously* — the synthetic random-walk fixture yields **0 entries**, so it would pass against any uptrend formula. Zero protection against the drift. Whichever design path Austin picks, this test must be rewritten with entry-generating data + the chosen spec.
 
 **D2 report corrections (two errors in `docs/REPORT_D2.md`):**
 1. D2 called ema_pullback "not viable" — now gate passer #5 after the bug fix
@@ -41,13 +47,16 @@ Human (Austin) is the courier — paste agent output back into this file when th
 **Paper-trade ranking:**
 1. **donchian_breakout** — highest confidence; 2698 trades; simplest logic; cleanest audit
 2. **high52_breakout** — clean audit; strong diversification
-3. **ema_pullback** — large trade count (5423); resolve params wiring issue first
+3. **ema_pullback** — DEMOTE pending decision. Large trade count (5423) but it is now an RSI-dip strategy, not the spec'd pullback (2 of its 3 EMA conditions are inert). Decide: (a) accept + re-spec/rename + drop dead ema_fast/ema_mid params, or (b) redesign to give the pullback real bite, or (c) park it. Its robustness evidence is partly illusory (see details above).
 4. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
 5. **bb_squeeze_breakout** — most marginal; lowest priority
 
 ### Open (engine lane)
-- [ ] Decide paper-trade go/no-go for donchian + high52 (ready now)
-- [ ] Codex task: verify ema_pullback ema_fast/ema_mid params are wired into indicator calls
+- [x] ~~Paper-trade go/no-go for donchian + high52~~ — **APPROVED GO on both (Austin, this session).** Spec-clean (Codex + D2), robust above gate IS+OOS+2× slippage. NOTE: donchian max DD @1% risk = 71.6% → wants fractional sizing. high52 = 27.7%, the smooth one. **No paper-trade harness exists yet → next build.**
+- [ ] **Build paper-trade harness** for donchian + high52: position sizing (donchian needs ≤0.5% risk), result-contract wiring, monitoring. Scope deliberately — greenfield.
+- [x] ~~Codex task: verify ema_pullback params wired~~ — RESOLVED by Claude: wired correctly, but conditions inert (see details). Now a strategy-design decision, not a wiring fix.
+- [x] ~~ema_pullback design decision~~ — **DECIDED (Austin): accept as RSI-dip.** Codex task issued: rename/re-spec to reflect it's an RSI-dip-in-uptrend strategy, drop dead ema_fast/ema_mid params, rewrite the vacuous test with entry-generating data.
+- [ ] xsec_momentum (if ever promoted): fix confirmed off-by-one momentum index + Monday-holiday rebalance fallback. Not blocking — it's ranked #4, needs regime/sizing controls first.
 - [ ] levered_etf_meanrev: consider re-evaluation with longer IS window (low priority)
 
 ---
@@ -55,60 +64,51 @@ Human (Austin) is the courier — paste agent output back into this file when th
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** NEW TASK — strategy review + ema_pullback param audit
+**Status:** NEW TASK — ema_pullback → RSI-dip rework
 
 ### Done
 - Reviewed result contract v0.2.0; signed off on 7 requests + 3 judgment calls
 - Built `docs/dashboard_results.html` (12 gate rows, equity curves, exit breakdowns, robustness charts)
+- Completed read-only spec-vs-implementation review of the 5 current gate passers
+- Confirmed Claude's `ema_pullback` param diagnosis with `/tmp/diag_ema.py`
 
 ### Open
-- [ ] **Strategy review** — see task below
+- [ ] **ema_pullback → RSI-dip rework** (Austin decided: accept as RSI-dip) — see task below
+
+### Task: ema_pullback → RSI-dip rework
+
+Austin's decision: accept the strategy as what it actually is (RSI-dip-in-uptrend), not the spec'd EMA pullback. Engine (Claude) decided the canonical form and the verify step; you implement.
+
+**Canonical form (effective rule):** `entry_long = (close > ema200) & (rsi(rsi_n) < rsi_thresh) & atr.notna()`. Remove the two inert conditions (`low <= ema20`, `ema50 > ema200`) entirely — they were provably zero-delta on IS, so removing them keeps IS behavior identical while making the code honest about what's traded. Keep: `ema_slow`/ema200 trend gate, `rsi_n`, `rsi_thresh`, `stop_mult`, `atr_n`, target_r=2.0, time_stop_bars=15.
+
+**Steps:**
+1. **Rename** the strategy `name` (Austin wants the rename). Suggest `rsi_dip_uptrend` — confirm with Austin if you prefer another. ⚠️ This cascades: registry key, `results/{name}_*.json` + `_trades.csv`, `results/robustness_{name}.json`, the dashboard's strategy list, the spec doc, and the test filename. Do it as ONE atomic change.
+2. **Edit** `src/stockslab/strategies/ema_pullback.py` → new module name: drop `ema_fast`/`ema_mid` from params, remove the inert conditions, implement the canonical form above.
+3. **Rewrite** the test (currently `tests/test_strat_ema_pullback.py`): the entry-rule test is vacuous (synthetic random walk → 0 entries). Use a trending fixture that actually generates entries; assert entry == `close>ema200 & rsi<rsi_thresh`. Keep the causality / stop_dist=1.5×ATR / exit-always-false / output-columns tests.
+4. **Re-run** `.venv/bin/python scripts/run_backtests.py --strategies <newname>` and `scripts/robustness.py`. Regenerate the canonical result JSONs + trade CSVs.
+5. **Update** the spec doc (`docs/superpowers/plans/2026-06-12-two-track-stock-research.md` line 216) to describe the RSI-dip rule, and add the renamed strategy to the dashboard.
+
+**Verify + hand back to Claude (engine):** IS should reproduce **PF≈1.387, n≈5423** exactly (inert-condition removal is zero-delta on IS). Report the new **OOS** PF/n — if OOS shifts materially from 1.290/prior, that's signal about the removed conditions; flag it. Do NOT treat the strategy as paper-trade-ready — Claude confirms the edge survived before it re-enters the ranking.
+
+**When done:** write results in this section, set Status to IDLE.
 
 ### Issues / notes
 - Dashboard note: `results/robustness_ema_pullback.json` now exists (ema_pullback is a 5th gate passer). The dashboard was built for 4 survivors — add ema_pullback to the equity curves and robustness chart sections.
 - Dashboard `fetch()` — serve from project root: `python3 -m http.server 8080`
 
-### Task: Strategy code review + ema_pullback param audit
+### Strategy review findings
 
-Two sub-tasks. Read Claude's Phase D summary in this file first for context.
+Sub-task 1 confirmation: I agree with Claude. `ema_fast`, `ema_mid`, and `ema_slow` are wired into the EMA calls, so this is not a param plumbing bug. The diagnostic reproduced exactly: base signals 15,354; dropping `low <= ema20` changed 0 signals; dropping `ema50 > ema200` changed 0 signals; `ema_fast` 16/20/24 and `ema_mid` 40/50/60 all produced 15,354 signal bars.
 
----
-
-#### Sub-task 1: ema_pullback param wiring audit
-
-**Context:** Claude ran a robustness sweep of ema_pullback. `ema_fast` (20→16 and 20→24) and `ema_mid` (50→40 and 50→60) both returned **identical PF=1.3872 and n=5423** — no change at all. This is suspicious: if those params were wired into indicator calculations, different values should produce different signal counts.
-
-**Files:**
-- `src/stockslab/strategies/ema_pullback.py` — strategy implementation
-- `src/stockslab/indicators.py` — indicator implementations
-
-**Your task:**
-1. Read `ema_pullback.py` in full. Check how the strategy reads `self.params['ema_fast']` and `self.params['ema_mid']`
-2. Check whether the signal generation code uses these param values when computing the EMAs, or if the period is hardcoded
-3. If hardcoded: fix so params flow through. If already wired: explain why the sweep returned identical results (possible: the param changes don't affect the specific condition used after AGY's fix)
-4. Write findings here — 2-3 sentences: what you found, whether it needs a fix, and if so what the fix is
-
----
-
-#### Sub-task 2: Strategy spec review (all 5 gate passers)
-
-**Context:** We have 5 strategies that pass the IS PF > 1.3 / N ≥ 500 / OOS PF > 1.15 gate. Claude's Gemini auditors verified logic for 4 of them (see `docs/REPORT_D2.md`); ema_pullback was not audited by D2 (it was failing at audit time).
-
-**Spec source:** `docs/superpowers/plans/2026-06-12-two-track-stock-research.md`
-
-**Your task:** For each of the 5 gate passers, read the implementation and compare to the spec rule. Flag any deviations. Format your findings as a table:
+Recommendation: Do not paper-trade `ema_pullback` under the current name/spec until Austin makes the design call. Either accept it as an RSI-dip-in-long-uptrend strategy and rename/drop dead EMA params, or redesign the pullback so `low <= ema20` and the EMA stack actually constrain entries.
 
 | Strategy | Spec match? | Deviations / notes |
 |---|---|---|
-| donchian_breakout | | |
-| high52_breakout | | |
-| ema_pullback | | |
-| xsec_momentum | | |
-| bb_squeeze_breakout | | |
-
-Focus on: entry conditions, exit conditions, stop calculation, time stop. You don't need to re-run anything — this is a read-only code review.
-
-**When done:** write your table and ema_pullback param findings in this section, then update Status to IDLE.
+| donchian_breakout | Yes | Matches spec: entry `close > donchian_high(55).shift(1)`, exit `close < donchian_low(20).shift(1)`, stop `2*atr(14)`, trail 3, no time stop. My read agrees with D2's clean audit. |
+| high52_breakout | Yes | Matches spec: entry `high >= rolling_max(high,252).shift(1)` plus `volume > 1.5*sma(volume,50)`, stop `2*atr(14)`, trail 3, no explicit signal/time exit. My read agrees with D2's clean audit. |
+| ema_pullback | No | Stop `1.5*atr(14)`, target 2R, and time stop 15 match. Entry drift is material: implementation uses `(ema50 > ema200) & (close > ema200) & (low <= ema20) & (rsi14 < 40)`, not spec `(ema50 > ema200) & (close > ema50) & (low <= ema20) & (rsi14 < 40)`. In current data, `low <= ema20` and `ema50 > ema200` are inert after the AGY relaxation, so the strategy behaves like `close > ema200 & rsi14 < 40`. D2 is stale here: it audited the old 15-trade failure, not the fixed 5,423-trade passer. Existing test `tests/test_strat_ema_pullback.py` still encodes the spec's `close > ema50` condition, so tests/spec and implementation are now out of sync. |
+| xsec_momentum | Partial | Broad spec matches: stock rotation, top 10, SPY regime filter, rotation exits, no explicit stop/time stop. D2's two logic caveats are real: momentum indexing is off by one versus literal `close.shift(21)/close.shift(252)-1` because code uses `hist.iloc[-21] / hist.iloc[-252] - 1`; and rebalance dates are only Mondays present in the data, so Monday market holidays skip that week instead of falling back to the next trading day. |
+| bb_squeeze_breakout | Yes | Matches spec: squeeze uses BB width in the lowest 15th percentile of trailing 252, entry requires prior-bar squeeze and current `close > bb_upper`, stop `2*atr(14)`, trail 2.5, no explicit signal/time exit. My read agrees with D2 that logic matches; edge remains marginal, but that is performance risk rather than spec drift. |
 
 ### Task: Build results dashboard (`docs/dashboard_results.html`)
 
