@@ -1,0 +1,6 @@
+pandas>=3.0
+numpy
+pyarrow
+yfinance>=0.2.50
+pytest
+matplotlib
