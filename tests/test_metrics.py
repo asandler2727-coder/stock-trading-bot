@@ -354,3 +354,49 @@ class TestSummarizeMaxDd1Pct:
         assert s["max_dd_1pct"] >= 0.0
         # Confirm it's non-trivial (we expect DD > 0 here)
         assert s["max_dd_1pct"] > 0.0
+
+
+# ===========================================================================
+# REGRESSION/HARDENING — minor findings from adversarial Opus review (2026-06-12)
+# ===========================================================================
+
+
+class TestEquityCurveDeterministicTieOrder:
+    """max_dd must not depend on the symbol-iteration order of same-exit_date trades."""
+
+    def test_same_exit_date_trades_give_deterministic_max_dd(self):
+        # Two trades exit on the SAME date but have different entry dates.
+        # +5R and -4R. With only exit_date sorting, input order would change the
+        # intra-curve path and thus max_dd. A stable secondary key fixes it.
+        win = _trade(5.0, entry_date="2020-01-02", exit_date="2020-01-10", symbol="A")
+        loss = _trade(-4.0, entry_date="2020-01-05", exit_date="2020-01-10", symbol="B")
+
+        dd_order1 = metrics.max_drawdown(metrics.equity_curve([win, loss]))
+        dd_order2 = metrics.max_drawdown(metrics.equity_curve([loss, win]))
+        assert dd_order1 == pytest.approx(dd_order2)
+
+
+class TestSummarizeFailsLoudOnNonFiniteR:
+    """A NaN r_multiple silently poisons the equity curve; summarize must reject it."""
+
+    def test_nan_r_multiple_raises(self):
+        bad = [_trade(1.0), _trade(float("nan"))]
+        with pytest.raises(ValueError):
+            metrics.summarize(bad)
+
+    def test_inf_r_multiple_raises(self):
+        bad = [_trade(1.0), _trade(float("inf"))]
+        with pytest.raises(ValueError):
+            metrics.summarize(bad)
+
+
+class TestPhase1GateRejectsNonFinitePf:
+    """PF == inf over >=500 trades means ZERO losers — almost always an upstream
+    bug, not a real edge. The gate must NOT auto-pass it."""
+
+    def test_inf_pf_does_not_pass(self):
+        s = {"pf": float("inf"), "n": 600}
+        passed, reasons = metrics.phase1_gate(s)
+        assert passed is False
+        assert any("finite" in r.lower() or "inf" in r.lower() or "suspicious" in r.lower()
+                   for r in reasons)

@@ -79,7 +79,10 @@ def equity_curve(trades, risk_frac: float = 0.01) -> pd.Series:
     if not trades:
         return pd.Series([], dtype=float)
 
-    sorted_trades = sorted(trades, key=lambda t: t.exit_date)
+    # Sort by exit_date, with a stable secondary key so the curve (and thus
+    # max_drawdown) is deterministic regardless of symbol-iteration order among
+    # trades sharing an exit_date.
+    sorted_trades = sorted(trades, key=lambda t: (t.exit_date, t.entry_date, t.symbol))
     equity = 1.0
     dates = []
     values = []
@@ -145,6 +148,17 @@ def summarize(trades) -> dict:
         max_dd_1pct     : float  — max drawdown of equity curve at 1% risk
         exit_reason_counts : dict[str, int]
     """
+    # Fail loud on corrupt data: a non-finite r_multiple (NaN/inf) would be
+    # silently dropped from profit_factor and would poison the equity curve to
+    # NaN. Surface it as an error rather than reporting misleading stats.
+    bad = [t for t in trades if not math.isfinite(t.r_multiple)]
+    if bad:
+        raise ValueError(
+            f"summarize() received {len(bad)} trade(s) with non-finite r_multiple "
+            f"(e.g. symbol={bad[0].symbol}, exit_date={bad[0].exit_date}); "
+            "this indicates upstream data/engine corruption."
+        )
+
     pf = profit_factor(trades)
     wr = win_rate(trades)
     n = len(trades)
@@ -199,7 +213,16 @@ def phase1_gate(s: dict) -> tuple[bool, list[str]]:
     pf_val = s["pf"]
     n_val = s["n"]
 
-    if not (pf_val > 1.3):
+    # A non-finite PF (inf) means zero losing trades over the whole sample —
+    # over a 500+ trade in-sample window that is almost certainly an upstream
+    # bug (sign error, fill artifact masking losers), not a real edge. Do NOT
+    # auto-pass it; flag as suspicious so it gets investigated, not promoted.
+    if not math.isfinite(pf_val):
+        reasons.append(
+            f"pf is non-finite ({pf_val}) — zero losers over {n_val} trades is "
+            "suspicious (likely an upstream bug, not an edge); not auto-passed"
+        )
+    elif not (pf_val > 1.3):
         reasons.append(f"pf {pf_val:.4f} <= 1.3 (required pf > 1.3)")
     if not (n_val >= 500):
         reasons.append(f"n {n_val} < 500 (required n >= 500)")
