@@ -87,10 +87,11 @@ All agents read and write this file directly — no human courier, no pasting. T
 
 ## Codex — copilot lane
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-13
 **Status:** IDLE
 
 ### Done
+- Completed **paper-trade harness design review** (read-only council seat). Verdict: **GREEN with required spec changes before ratification**. The `step_position` extraction is behavior-preserving-feasible for the daily GO strategies, but only if the spec explicitly persists the engine state below and treats same-day fill/update ordering as part of the contract.
 - Completed **Task B: Portfolio-level concurrent-drawdown view**. Added a calendar-day realized-R timeline helper and `scripts/portfolio_view.py`; hand-computed overlap test passes. Mark-to-market variant skipped deliberately for now because it needs open-position daily price reconstruction and is beyond the minimal sizing input.
 - Task B results at 1% risk/trade: donchian IS peak concurrency `113` / peak open risk `113%` / calendar DD `84.21%` vs legacy `84.93%`; donchian OOS peak concurrency `103` / peak open risk `103%` / calendar DD `86.12%` vs legacy `86.12%`; high52 IS peak concurrency `53` / peak open risk `53%` / calendar DD `51.44%` vs legacy `53.34%`; high52 OOS peak concurrency `48` / peak open risk `48%` / calendar DD `35.29%` vs legacy `35.91%`.
 - Completed **Task A: Grok-council remediation**. `universe="all"` now excludes levered/inverse ETFs while `levered_etf_meanrev` keeps its declared levered universe; result contracts flag implausible price scale and set data quality to warning; `max_drawdown` now counts first-trade losses from starting equity; MMC alias verified as correct (`MMC` old ticker now downloads via current Yahoo ticker `MRSH`; cache close sanity: latest `168.68`, plausible vs current MRSH quote range); strict clean-universe regeneration completed.
@@ -107,7 +108,7 @@ All agents read and write this file directly — no human courier, no pasting. T
 - Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- [ ] **GO NOW — Design review (READ-ONLY) of the paper-trade harness spec.** See Task block below. This is the premium-council review *before* implementation. Read-only: review the design, do NOT write harness code yet.
+- [x] ~~**GO NOW — Design review (READ-ONLY) of the paper-trade harness spec.**~~ **DONE 2026-06-13.** Findings below. Read-only review only; no harness code written.
 - [ ] **Paper-trade harness implementation — STANDBY, DO NOT START.** Blocked on Claude+Austin locking the harness design (post-council). Full spec + file layout will land in this section once the design is ratified. The spec draft is committed at `docs/superpowers/specs/2026-06-13-paper-trade-harness-design.md` — review it (task above), but do not implement against it until it's marked ratified. Pre-committed constraints so you have context (these are decided, not open for redesign):
   - **SQLite ledger from day one** — `signals` / `trades` / `runs` tables, not flat files.
   - **Sizing engine enforces donchian's cap:** start **0.25% risk/trade, max 25 concurrent open positions** (~6.25% open-risk ceiling). 0.5% risk / max-20 is a *later* test, NOT the start. high52 runs standard sizing.
@@ -131,6 +132,25 @@ All agents read and write this file directly — no human courier, no pasting. T
 4. **The 6 open questions (§11)** — weigh in on any where the implementation reality changes the answer, especially Q3 (yfinance re-adjustment under open positions) and Q6 (pending-order lifecycle).
 
 **Output:** write findings into this Codex section — a feasibility verdict on the refactor (GREEN / needs-changes / blocked), a must-fix list (concrete design gaps that would bite implementation), and your take on the open questions. Commit your own section. Do NOT edit other lanes' sections or the spec file (Claude folds all council findings into the spec revision).
+
+### Design review output — paper-trade harness spec (2026-06-13)
+
+**Feasibility verdict:** **GREEN with required spec changes before ratification.** The shared `step_position` core is feasible and should preserve behavior for `donchian_breakout` + `high52_breakout`, because both are daily, standard next-open strategies with ATR(14) trailing and no `entry_at_open`. Exact trade-list equivalence is the right bar; bit-for-bit file hashes are not worth targeting because CSV/JSON serialization, ordering, and refactor-local float operation order can drift while trade semantics remain identical. Baseline checked: `.venv/bin/python -m pytest tests/test_engine.py tests/test_strat_donchian_breakout.py tests/test_strat_high52_breakout.py -q` → **41 passed**.
+
+**Where the extract lives:** the reusable in-position block is `run_signal_backtest()` lines 126-287: gap stop, stop, target, pending signal exit, time stop, session exit, final eod, then post-bar trailing update and `pending_exit` capture. Standard next-open entry setup is lines 423-448 and should probably become a separate helper (`open_position_from_signal`) rather than being hidden inside `step_position`. `entry_at_open` lines 293-421 are a different same-bar mode; it is out of v1 scope for the GO strategies but should stay covered by existing engine tests.
+
+**State the spec must carry into `step_position`:** `entry_date`, `entry_price`, `stop_price`, `stop_dist_initial`, `target_price`, `bars_held`, `pending_exit`, `slippage_bps`, `symbol`, and strategy params `{trail_atr_mult, target_r, time_stop_bars, session_exit}`. The bar input must include OHLC, date/index position, `atr14`, the current bar's `exit_long`, `is_final_bar`, and `is_last_bar_of_session`. There is no `trail_high` state in this engine; trailing is `stop_price = max(stop_price, close - trail_atr_mult * atr14)`.
+
+**Must-fix before implementation:**
+- Persist `bars_held`, `pending_exit`, and `target_price` on `positions`; otherwise signal exits and gap-stop timing diverge silently.
+- Define `step_position` as price mechanics only: it returns exit price/date/reason plus updated state. Harness ledger math should compute `r_multiple`, `pct_return`, and dollar P&L from stored shares and stop distance.
+- Make same-run ordering explicit: fill D-1 pending entries at D open, then run `step_position` on those newly filled positions for bar D with `bars_held=0`, so entry-bar stop/target checks match the engine.
+- Do not reuse `portfolio_timeline_summary()` for live cap enforcement; it is a completed-ledger report helper. Live cap enforcement is a direct count of open donchian positions, with the 25-slot cap donchian-only.
+- Put a SQLite transaction around the whole daily run and add uniqueness guards for signals/fills, so a rerun cannot double-book after a partial failure.
+- Treat yfinance re-adjustment as a real live-state hazard: store enough raw fill/stop state and add a reconciliation check before running stops on refreshed bars.
+- Keep `sentiment_note`/`catalyst_note` out of decision query paths with separate ledger read APIs, not just comments.
+
+**Open-question takes:** Q3 needs a real mitigation, not a note; adjusted historical bars can invalidate stored stops. Q4 entry-time open-risk is the right v1 cap definition because trailing generally reduces risk, but monitor live stop distance separately. Q5 needs a trading-day/no-bar guard and per-symbol fetch failures should not abort the whole run. Q6 should keep unconditional next-open fill for backtest equivalence, but log large gap fills as observations rather than expiring or revalidating orders in v1.
 
 ### Task A: Grok-council remediation (universe scrub + fixes + regeneration)
 
