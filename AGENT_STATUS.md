@@ -2,7 +2,7 @@
 
 Coordination file for the three-agent lane split.
 Each agent owns its section. Only write to your own section.
-Human (Austin) is the courier — paste agent output back into this file when they finish.
+All agents read and write this file directly — no human courier, no pasting. Tasks for another lane go in that lane's section; the agent picks them up from here.
 
 ---
 
@@ -19,8 +19,12 @@ Human (Austin) is the courier — paste agent output back into this file when th
 - Diagnosed ema_pullback "param bug" → it's spec drift, not wiring (proof in `/tmp/diag_ema.py`); handed Codex a sharpened read-only task
 - Digested Codex spec review: donchian + high52 spec-clean (gate CLEARED); ema_pullback drift confirmed + vacuous test found; xsec off-by-one + holiday bugs confirmed (already known)
 - **Engine checkpoint — VERIFIED Codex's `rsi_dip_uptrend` rework:** independently reran it — IS reproduces exactly (PF 1.3872 / n 5423), OOS holds (PF 1.2902 / n 1649), my numbers match Codex's to the digit; new test passes + Codex's full suite is 262 green; rename clean repo-wide. Edge survived → re-enters ranking at #3.
+- **Grok review council (2026-06-12):** convened 6-agent council on `GROK_REVIEW.txt` (3 fact-checkers + methodology skeptic + engineering pragmatist + steelman/red-team). All 6 of Grok's code-hygiene claims CONFIRMED; 4 of its complaints were STALE (plumbing/slippage/aliases already fixed by Codex; superseded numbers quoted). Council findings beyond Grok: (1) UVXY's corrupted ~5e11 prices ARE in `universe="all"` → donchian (approved GO) traded it 13 times incl. a fake +22.51R winner; measured impact small (IS PF 1.546→1.540 excl UVXY) but it's a data-integrity hole — no validation layer checks price plausibility. (2) rsi_dip phase2 FAIL is hard (contract records `passed:false`), pulled from ranking below. (3) Grok's X-sentiment sizing/veto/regime proposals REJECTED (unbacktestable, breach the descriptive/prescriptive wall); kept the reframed harmless subset: anomaly-triage searches, post-hoc forensics as hypothesis generation only, passive sentiment logging next to paper trades. (4) Unaddressed by anyone: multiple-testing across 12 strategies, gate-threshold provenance, OOS regime representativeness (high52 has zero 2022 trades). Remediation tasks issued to Codex + AGY (see their sections).
+- **Deep audit (Fable + agent fleet) → `docs/REPORT_fable_audit.md`.** Two decision-relevant defects: (1) CRITICAL — canonical donchian/high52 results were computed at 14:11 **mid-data-download** on ~68/156 symbols (runner silently skips missing parquets); full-universe repro still passes gates but lower (don IS 1.548/5394, OOS 1.276/1969; h52 IS 1.482/2001, OOS 1.281/601) → ALL their quoted numbers (incl. max-DD + robustness) are stale. (2) HIGH — runner cold-slices OOS before generate(), so indicators re-seed at 2022-01-01; warm-started OOS drops rsi_dip to **PF ~1.15 (gate edge)** vs reported 1.29. Plus: survivorship bias (100%-survival 2026 universe) unrecorded in go/no-go; high52 has zero 2022 OOS trades (bear never sampled); results-plumbing gaps (new runs never refresh the files reports read). Causality/adjustment/engine-mechanics/indicators all verified CLEAN.
 
 ### Phase D results
+
+> ⚠️ **2026-06-12 audit:** donchian + high52 rows below are STALE — computed mid-download on ~68/156 symbols (see `docs/REPORT_fable_audit.md` F1). Full-universe repro: donchian IS 1.548/5394, OOS 1.276/1969; high52 IS 1.482/2001, OOS 1.281/601 — still gate-passing. rsi_dip rows reproduce exactly, but warm-started OOS ≈ 1.15 (F2).
 
 **5 gate passers (ema_pullback added after AGY bug fix):**
 
@@ -45,16 +49,21 @@ Human (Austin) is the courier — paste agent output back into this file when th
 1. D2 called ema_pullback "not viable" — now gate passer #5 after the bug fix
 2. D2 called levered_etf_meanrev OOS>IS "data mining" — AGY confirmed it's the QQQ filter working correctly (filter blocked all 2022 trades; 2018 PF=0.57, 2019 PF=0.78 hurt IS). Still a gate fail (IS PF=1.116) but mechanically explained, not overfit
 
-**Paper-trade ranking:**
-1. **donchian_breakout** — highest confidence; 2698 trades; simplest logic; cleanest audit
-2. **high52_breakout** — clean audit; strong diversification
-3. **rsi_dip_uptrend** (was ema_pullback) — ✅ REWORKED + VERIFIED. Accepted as the RSI-dip strategy it is; Codex renamed + simplified to `close>ema200 & rsi(14)<40`, Claude confirmed IS reproduces exactly (PF 1.387 / n 5423) and OOS holds (PF 1.290 / n 1649). Real robustness rests on rsi_thresh + ema_slow (dropped ema_fast/ema_mid were inert). Largest trade count of the set (5423).
-4. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
-5. **bb_squeeze_breakout** — most marginal; lowest priority
+**Paper-trade ranking (updated 2026-06-12, Grok council):**
+1. **donchian_breakout** — highest confidence; simplest logic; cleanest audit. GO needs re-ratification on clean-universe regeneration (UVXY was in its universe; measured impact small).
+2. **high52_breakout** — clean audit; strong diversification. Caveat for re-ratification: zero 2022 OOS trades → its OOS PF never sampled a bear.
+3. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
+4. **bb_squeeze_breakout** — most marginal; lowest priority
+- ~~rsi_dip_uptrend~~ — ❌ **REMOVED from ranking.** Warm-start OOS PF 1.1438 < 1.15 phase2 gate; contract on disk records `passed: false`. "Verified" meant "reproduces," not "passes." May re-enter only if it passes warm-start OOS on the levered-ETF-excluded universe after Codex's regeneration.
 
 ### Open (engine lane)
 - [x] ~~Paper-trade go/no-go for donchian + high52~~ — **APPROVED GO on both (Austin, this session).** Spec-clean (Codex + D2), robust above gate IS+OOS+2× slippage. NOTE: donchian max DD @1% risk = 71.6% → wants fractional sizing. high52 = 27.7%, the smooth one. **No paper-trade harness exists yet → next build.**
-- [ ] **Build paper-trade harness** for donchian + high52: position sizing (donchian needs ≤0.5% risk), result-contract wiring, monitoring. Scope deliberately — greenfield.
+- [x] ~~PRE-HARNESS (from audit): fix runner + regenerate~~ — **DONE by Codex** (warm-start OOS, missing-cache guard, slippage_mult in contract, inf auto-pass fix, aliases, full strict regeneration). Superseded by round 2 below.
+- [ ] **PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.** Codex tasks issued (see Codex section): exclude levered ETFs from `universe="all"`, price-plausibility data_quality flag, max_dd seeding fix, MMC→MRSH alias verify/fix, regenerate + re-gate donchian/high52/rsi_dip; plus portfolio-level concurrent-DD view (the harness sizing input — single-stream 71.6% donchian DD is a floor). AGY hygiene task issued in parallel.
+- [ ] **GO re-ratification (Austin decision, after round 2):** re-confirm donchian + high52 GO on clean-universe numbers, with two discounts written down explicitly: survivorship (100%-survivor universe flatters breakout strategies most) and selection bias (5 passers out of 12 strategies tested on one OOS window, no multiple-testing correction).
+- [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/).
+- [ ] **Build paper-trade harness** for donchian + high52: position sizing (donchian needs ≤0.5% risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Blocked on round 2 regeneration + concurrent-DD number.
+- [ ] README.md — post-harness, deliberately deferred (Grok wanted it near-blocking; council demoted: audience is hypothetical, harness is concrete).
 - [x] ~~Codex task: verify ema_pullback params wired~~ — RESOLVED by Claude: wired correctly, but conditions inert (see details). Now a strategy-design decision, not a wiring fix.
 - [x] ~~ema_pullback design decision~~ — **DECIDED (Austin): accept as RSI-dip.** Codex task issued: rename/re-spec to reflect it's an RSI-dip-in-uptrend strategy, drop dead ema_fast/ema_mid params, rewrite the vacuous test with entry-generating data.
 - [x] ~~ema_pullback → rsi_dip_uptrend rework + OOS confirm~~ — **DONE + Claude-VERIFIED.** Codex shipped the rename/refactor; Claude reran (IS 1.3872/5423 exact, OOS 1.2902/1649 holds, 262 tests green). Strategy is real, just honestly named now.
@@ -66,9 +75,13 @@ Human (Austin) is the courier — paste agent output back into this file when th
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** IDLE
+**Status:** NEW TASKS — Grok-council remediation (Task A: universe scrub + fixes + regeneration; Task B: portfolio concurrent-DD view)
 
 ### Done
+- Fixed audit-confirmed runner/data issues: missing cached symbols now fail loudly by default (`--allow-missing-cache` required for diagnostic partial-cache runs); OOS runs warm-start from IS history and filter metrics to OOS entries; legacy `results/{strategy}_{split}.json` files refresh again; result contracts now record evaluation range, warmup start, slippage multiplier, requested symbols, and missing symbols; `phase2_oos` no longer auto-passes infinite PF; current Yahoo ticker aliases now preserve internal cache keys for `BRK.B`→`BRK-B`, `MMC`→`MRSH`, and `SQ`→`XYZ`.
+- Tightened the runner CLI so a strict run with missing cache exits nonzero instead of skipping the strategy and returning success. Verified strict `donchian_breakout` IS run stopped on missing cache before the alias/cache fix, then strict regeneration succeeded after fetching the missing files.
+- Regenerated affected daily results in strict full-cache mode. Fresh numbers: donchian IS PF `1.546227264349238` / N `5506`, OOS PF `1.2625405081695291` / N `2056`; high52 IS PF `1.4759744282323888` / N `2051`, OOS PF `1.2096143874165228` / N `679`; rsi_dip_uptrend IS PF `1.3940966758744204` / N `5523`, warm OOS PF `1.1437868403434053` / N `2018` (below strict `>1.15` gate).
+- Regenerated survivor robustness files in strict full-cache mode. Fresh IS robustness: donchian 2x slippage PF `1.4917168002955834`, min non-slippage PF `1.5111479669495624`; high52 2x slippage PF `1.410029427547485`, min non-slippage PF `1.3950708046925098`; rsi_dip_uptrend 2x slippage PF `1.3326295744966945`, min non-slippage PF `1.2912762214756133`.
 - Reviewed result contract v0.2.0; signed off on 7 requests + 3 judgment calls
 - Built `docs/dashboard_results.html` (12 gate rows, equity curves, exit breakdowns, robustness charts)
 - Completed read-only spec-vs-implementation review of the 5 current gate passers
@@ -76,23 +89,49 @@ Human (Austin) is the courier — paste agent output back into this file when th
 - Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- (None)
+- [ ] **Task A: Grok-council remediation** — universe scrub, contract flag, metrics fix, alias verify, regenerate + re-gate (see task block below)
+- [ ] **Task B: Portfolio-level concurrent-drawdown view** (see task block below; can follow Task A)
+
+### Task A: Grok-council remediation (universe scrub + fixes + regeneration)
+
+**Context:** Austin had Grok review the repo (`GROK_REVIEW.txt`); a Claude council fact-checked it and debated the recommendations. Five concrete changes fell out, then a regeneration. All findings below are verified against the code with file:line evidence — this is remediation, not investigation.
+
+1. **Exclude levered/inverse ETFs from `universe="all"`.** `resolve_symbols` in `scripts/run_backtests.py` returns `list(data.UNIVERSE.keys())` for `"all"`, which includes `_LEVERED_ETFS` (`data.py:62`) — and UVXY's parquet is corrupted by yfinance auto-adjust (max close ≈ 5.145e11; 465 rows with close > 1e9). Strategies affected: `donchian_breakout`, `rsi_dip_uptrend`, `bb_squeeze_breakout`, `orb` (all declare or default to `universe="all"`). Change `"all"` to mean `kind != "levered"`. `levered_etf_meanrev` keeps its own declared levered universe — do not touch it. Add/adjust a test pinning the new meaning of `"all"`.
+2. **Price-plausibility data_quality flag.** In `result_contract.py` (near the survivorship flag logic at ~line 264): for each symbol in the panel, if any |close| > 1e6 OR max(close)/min(close) > 1000, append a flag like `implausible_price_scale:UVXY` to `data_quality.flags` + a caveat. ~15 lines + a test. (`levered_etf_meanrev` runs will then carry the flag — intended; that's the point.)
+3. **Fix `max_drawdown` seeding** (`metrics.py:121`): `running_max = values[0]` seeds from the first *post-trade* equity, so if the first trade loses, the drawdown from starting equity 1.0 is never counted. Seed with 1.0 (or prepend 1.0 to the curve). Add a hand-computed test where the first trade is a loser.
+4. **Verify/fix the MMC alias** (`data.py:97`): `"MMC": "MRSH"` looks wrong — MRSH is not an obvious Yahoo ticker for Marsh & McLennan (plain `MMC` likely is). Check what yfinance returns for `MRSH` vs `MMC`, fix or remove the alias if wrong, and sanity-check the cached `data/1d/MMC.parquet` closes against known MMC prices (current ~$200 range). This is latent: cache exists today, but any future `--force` re-fetch would silently pull wrong data.
+5. **Regenerate + re-gate on the clean universe**, strict full-cache, warm-start OOS: `donchian_breakout`, `high52_breakout`, `rsi_dip_uptrend` (+ `bb_squeeze_breakout` if cheap), including robustness for donchian + high52. Report fresh IS/OOS PF/N and gate outcomes in this section. Expectations to check against: Claude measured donchian IS 1.546 → ~1.540 excluding UVXY (should still pass comfortably); rsi_dip is expected to remain below the 1.15 phase2 gate (it's removed from the paper-trade ranking; this run is its one shot at re-entry).
+
+Full test suite green before reporting. Update this section when done.
+
+### Task B: Portfolio-level concurrent-drawdown view
+
+**Why:** `equity_curve`/`max_dd_1pct` (`metrics.py:85`) compounds trades one-by-one sorted by exit date — concurrent open positions are serialized, so donchian's 71.6% max DD @1% risk is a *floor*, not the real portfolio number. Austin can't pick harness sizing (the open question for donchian) without a concurrency-aware estimate. This is the sizing input for the paper-trade harness.
+
+**Scope (minimal honest version, not full MTM):**
+1. New function in `metrics.py` (or a small `scripts/portfolio_view.py`): build a **calendar-day timeline** from a trade list; track per-day count of open positions (entry_date ≤ day ≤ exit_date) and report **peak concurrent positions** and peak total open risk (count × 1% assumed per-trade risk).
+2. Compute a daily equity curve where each trade's 1%-risk-scaled return lands on its exit date, compounded along the calendar timeline (same convention as today, but date-indexed so overlapping clusters of losses inside the same window are visible), and report its max DD alongside the existing single-stream number.
+3. Run it for donchian + high52 on the fresh post-Task-A ledgers; report: peak concurrency, peak open risk, calendar-timeline max DD vs the legacy single-stream max DD.
+4. Stretch (only if cheap): mark-to-market variant using cached daily closes for open positions. If not cheap, skip and say so.
+
+Hand-computed test for the concurrency counting (e.g. 3 overlapping trades → peak 3). Update this section with the numbers — they go straight into the harness sizing decision.
 
 ### Rework results
 
 - New strategy name: `rsi_dip_uptrend`
 - Canonical rule now implemented: `entry_long = (close > ema200) & (rsi(rsi_n) < rsi_thresh) & atr.notna()`
-- IS reproduced: PF `1.3872470088066529`, N `5423`
-- OOS result: PF `1.2901913080388698`, N `1649`
-- OOS did not materially shift from prior `~1.290`; the removed conditions were zero-delta as expected
-- Robustness regenerated without dead EMA knobs; 2x slippage PF `1.3273892008693449`, min non-slippage robustness PF `1.2845276326066997`
-- Full test suite: `262 passed`
+- IS reproduced after full-cache regeneration: PF `1.3940966758744204`, N `5523`
+- Original cold-sliced OOS result: PF `1.2901913080388698`, N `1649`
+- Warm-started OOS after runner fix and full-cache regeneration: PF `1.1437868403434053`, N `2018` — below strict `>1.15` gate
+- Robustness regenerated without dead EMA knobs; 2x slippage PF `1.3326295744966945`, min non-slippage robustness PF `1.2912762214756133`
+- Full test suite after audit fixes: `270 passed`; contract schema/examples validate
 - Dashboard verified at `http://localhost:8080/docs/dashboard_results.html`: 12 rows, 11 charts, `Rsi Dip Uptrend` row present, no browser console errors, no mobile page overflow
 - Not paper-trade-ready by Codex decision; hand back to Claude to confirm the edge survived before re-entering the ranking
 
 ### Issues / notes
 - Dashboard `fetch()` — serve from project root: `python3 -m http.server 8080`
 - Retired generated `ema_pullback` result artifacts were removed so scans/reporting use only `rsi_dip_uptrend`
+- Strict runner regeneration is now unblocked for daily data: fetched `BRK.B`, `MMC`, and `SQ` cache files after adding current Yahoo ticker aliases. New contract JSONs record an empty missing-symbol list for the strict runs.
 
 ### Historical strategy review findings (pre-rename)
 
@@ -145,7 +184,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 ## AGY — mechanical lane
 
 **Last updated:** 2026-06-12
-**Status:** NEW TASK — independent verification of paper-trade candidates (donchian + high52)
+**Status:** NEW TASKS — repo hygiene (run now) + verification battery (⚠️ HOLD until Codex Task A regeneration lands — verify the FRESH ledgers, not the current ones)
 
 ### Done
 - Implemented result emitter (9774a2b)
@@ -157,11 +196,29 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
   - **Year-by-year PF**: IS had a few bad years (e.g., 2018: 0.569, 2019: 0.775).
   - **Symbol breakdown**: OOS trades are widely distributed (SQQQ: 52, SOXS: 51, UVXY: 49, TNA: 42, UPRO: 38, QQQ: 36, TQQQ: 35, SOXL: 35). Not concentrated in a single ETF, though bear ETFs are heavily represented.
   - **QQQ filter verdict**: The filter is working perfectly. There were exactly 0 trades in 2022 because QQQ was below its 200-day SMA. This entirely bypassed the 2022 bear market, which is why OOS outperformed IS.
+- **Repo hygiene**: Pinned dependencies in `requirements.txt`, deleted session scratch scripts (`test_ema*.py`, `analyze_etf.py`, `audit_trades.py`), and removed root `dashboard.html`. Test suite green.
 
 ### Open
-- [ ] **Independent verification battery** (donchian + high52) — extra eyes before paper trade; see task below
+- [ ] **Independent verification battery** (donchian + high52) — ⚠️ ON HOLD until Codex Task A regeneration finishes (Codex is excluding levered ETFs from the universe and regenerating all ledgers; verifying the current files would verify numbers about to be superseded). See task below.
 
-### Task: Independent verification of paper-trade candidates (READ-ONLY)
+### Task: Repo hygiene (mechanical, from Grok review — run now)
+
+Four independent items. None touch `src/` logic or `results/`. Use `.venv/bin/python` where needed.
+
+1. **Pin dependencies in `requirements.txt`.** Get installed versions with `.venv/bin/pip freeze`, then pin: `numpy`, `pyarrow`, `jsonschema`, `matplotlib`, `pytest` to the installed versions (`==` or `~=`, your call — be consistent). Leave `pandas>=3.0` and `yfinance>=0.2.50` as floors but add the installed version as a comment. Run the full test suite after (`.venv/bin/python -m pytest tests/ -q`) and confirm still green.
+2. **Delete scratch files at repo root:** `test_ema.py`, `test_ema_2.py`, `test_ema_3.py`, `test_ema_4.py` (session artifacts from the ema_pullback diagnostic — the real diagnostic lives in the AGENT_STATUS record). Then skim `analyze_etf.py` and `audit_trades.py`: if one-off session scratch, delete; if genuinely reusable, move to `scripts/` with a one-line module docstring saying what it does. Report which you chose and why in one line each.
+3. **Delete root `dashboard.html`.** First grep the repo for references to it (`grep -rn "dashboard.html" --include="*.md" --include="*.py" --include="*.html" .` excluding docs/dashboard_results.html itself); if anything still points at the root file, list it instead of deleting and stop. `docs/dashboard_results.html` is canonical.
+4. **Do NOT touch:** `GROK_REVIEW.txt`, `HANDOFF.md`, anything in `results/`, `data/`, or `src/`.
+
+**When done:** update this section with what was pinned, what was deleted/moved, and test-suite status.
+
+**Completion Report:**
+- **Pinned dependencies:** Pinned `numpy==2.4.6`, `pyarrow==24.0.0`, `jsonschema==4.26.0`, `matplotlib==3.11.0`, `pytest==9.0.3` in `requirements.txt`. Kept floors for `pandas` and `yfinance` with installed versions as comments.
+- **Deleted scratch files:** Removed `test_ema.py`, `test_ema_2.py`, `test_ema_3.py`, `test_ema_4.py`, `analyze_etf.py` (one-off script for levered ETF anomalies), and `audit_trades.py` (one-off audit script).
+- **Deleted dashboard.html:** Confirmed no cross-references and deleted root `dashboard.html`.
+- **Test suite status:** `pytest tests/ -q` ran 270 passed in 1.27s (green).
+
+### Task: Independent verification of paper-trade candidates (READ-ONLY — ⚠️ HOLD until Codex Task A done)
 
 **Why:** `donchian_breakout` + `high52_breakout` are APPROVED GO for paper trading. Before real-money-adjacent use we want an independent mechanical re-check — Codex reviewed spec-vs-code (logic) and Claude did the strategy diagnosis, but **nobody has independently recomputed the headline numbers from the raw trade ledgers or audited the underlying data.** That's the gap you fill.
 
@@ -246,4 +303,4 @@ Strategy 2: uptrend = `ema50 > ema200 and close > ema50`; entry when uptrend AND
 1. Read your section and the Shared context before starting any task
 2. Check other agents' sections for blockers or outputs you depend on
 3. Write your status update in your own section when done
-4. Human pastes update back into this file and commits
+4. Commit your own AGENT_STATUS.md update directly — don't ask Austin, don't wait for a courier
