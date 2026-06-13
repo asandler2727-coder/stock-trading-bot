@@ -1,8 +1,10 @@
 # Paper-Trade Harness — Design Spec
 
 **Date:** 2026-06-13
-**Status:** DRAFT — under council review (internal Claude critics + external Codex/AGY) before implementation
+**Status:** DRAFT — internal council COMPLETE (3× GO_WITH_CHANGES); external council (Codex + AGY) PENDING. Decisions below are LOCKED; full consolidation of council must-fixes is deferred until the external council reports, then applied in one pass. See `docs/REPORT_harness_council.md` for all findings.
 **Owner:** Claude (engine/research lane). Implementation: Codex. Verification: AGY.
+
+> **Decisions locked 2026-06-13 (Austin):** (1) high52 sizing **0.5%** risk/trade (Q1 resolved). (2) No-pyramiding scope = **per-(strategy, symbol)** — both strategies may hold the same name. (3) Golden-equivalence bar = **exact trade-list match to full float precision**, not bit-for-bit (Q2 resolved). (4) The 25-slot / 6.25% cap is **donchian-only**; high52 uncapped in v1. Do not relitigate these.
 
 ---
 
