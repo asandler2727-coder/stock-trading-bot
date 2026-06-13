@@ -1,13 +1,14 @@
 import json
+import argparse
 from pathlib import Path
 from stockslab.strategies import load_all
 from stockslab import data, engine, metrics
 from stockslab.strategies.base import RotationStrategy
 import copy
 
-def run_strat(strat, slippage_mult=1.0):
+def resolve_symbols(strat):
     if strat.universe == "all":
-        syms = list(data.UNIVERSE.keys())
+        syms = [s for s, info in data.UNIVERSE.items() if info["kind"] != "levered"]
     else:
         kind_map = {"stocks": "stock", "etfs": "etf", "levered": "levered"}
         target_kind = kind_map.get(strat.universe, "stock")
@@ -17,12 +18,24 @@ def run_strat(strat, slippage_mult=1.0):
         syms.append("QQQ")
     if isinstance(strat, RotationStrategy) and "SPY" not in syms:
         syms.append("SPY")
+    return syms
 
-    valid_syms = []
-    for s in syms:
-        if Path(f"data/{strat.timeframe}/{s}.parquet").exists():
-            valid_syms.append(s)
-    syms = valid_syms
+
+def require_cached_symbols(syms, timeframe, allow_missing_cache=False):
+    missing = [s for s in syms if not Path(f"data/{timeframe}/{s}.parquet").exists()]
+    if missing and not allow_missing_cache:
+        raise FileNotFoundError(
+            f"Missing cached parquet for {len(missing)} symbol(s) at data/{timeframe}: "
+            f"{', '.join(missing)}. Run scripts/fetch_data.py or rerun with "
+            "--allow-missing-cache for a diagnostic partial-universe run."
+        )
+    if missing:
+        print(f"WARNING: omitting {len(missing)} missing cached symbol(s): {', '.join(missing)}")
+    return [s for s in syms if s not in set(missing)]
+
+
+def run_strat(strat, slippage_mult=1.0, allow_missing_cache=False):
+    syms = require_cached_symbols(resolve_symbols(strat), strat.timeframe, allow_missing_cache)
 
     try:
         panel = data.load_panel(syms, strat.timeframe)
@@ -50,6 +63,14 @@ def run_strat(strat, slippage_mult=1.0):
     return metrics.summarize(trades)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--allow-missing-cache",
+        action="store_true",
+        help="Continue after printing missing cached symbols. Intended only for diagnostics.",
+    )
+    args = parser.parse_args()
+
     registry = load_all()
     Path("results").mkdir(exist_ok=True)
     
@@ -68,7 +89,7 @@ def main():
         strat = registry[strat_name]
         results_list = []
         
-        summ = run_strat(strat, slippage_mult=2.0)
+        summ = run_strat(strat, slippage_mult=2.0, allow_missing_cache=args.allow_missing_cache)
         if summ:
             results_list.append({"param": "slippage", "value": "2.0x", "pf": summ["pf"], "n": summ["n"]})
             
@@ -81,7 +102,7 @@ def main():
                         new_val = int(new_val)
                     strat.params = copy.deepcopy(base_params)
                     strat.params[p_name] = new_val
-                    summ = run_strat(strat)
+                    summ = run_strat(strat, allow_missing_cache=args.allow_missing_cache)
                     if summ:
                         results_list.append({"param": p_name, "value": f"{new_val} ({mult}x)", "pf": summ["pf"], "n": summ["n"]})
         

@@ -201,6 +201,10 @@ class TestMaxDrawdown:
     def test_single_element_returns_zero(self):
         assert metrics.max_drawdown(pd.Series([1.0])) == 0.0
 
+    def test_single_losing_trade_counts_starting_equity_drawdown(self):
+        curve = pd.Series([0.99])
+        assert metrics.max_drawdown(curve) == pytest.approx(0.01)
+
     def test_drawdown_is_non_negative(self):
         curve = pd.Series([1.0, 1.05, 0.90, 0.85, 0.95])
         assert metrics.max_drawdown(curve) >= 0.0
@@ -325,6 +329,12 @@ class TestPhase2Oos:
         passed, _ = metrics.phase2_oos(s)
         assert passed is True
 
+    def test_infinite_pf_does_not_auto_pass(self):
+        s = {"pf": math.inf, "n": 200}
+        passed, reasons = metrics.phase2_oos(s)
+        assert passed is False
+        assert any("non-finite" in r.lower() for r in reasons)
+
 
 # ---------------------------------------------------------------------------
 # Integration: equity_curve + max_drawdown via summarize
@@ -354,6 +364,33 @@ class TestSummarizeMaxDd1Pct:
         assert s["max_dd_1pct"] >= 0.0
         # Confirm it's non-trivial (we expect DD > 0 here)
         assert s["max_dd_1pct"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# portfolio_timeline_summary
+# ---------------------------------------------------------------------------
+
+class TestPortfolioTimelineSummary:
+    def test_counts_overlapping_trades(self):
+        trades = [
+            _trade(1.0, symbol="A", entry_date="2020-01-01", exit_date="2020-01-05"),
+            _trade(-1.0, symbol="B", entry_date="2020-01-03", exit_date="2020-01-07"),
+            _trade(0.5, symbol="C", entry_date="2020-01-04", exit_date="2020-01-06"),
+        ]
+
+        s = metrics.portfolio_timeline_summary(trades, risk_frac=0.01)
+
+        assert s["peak_concurrent_positions"] == 3
+        assert s["peak_open_risk_frac"] == pytest.approx(0.03)
+        assert s["open_positions"].loc[pd.Timestamp("2020-01-04")] == 3
+        assert s["max_dd"] >= 0.0
+
+    def test_empty_returns_zeroes(self):
+        s = metrics.portfolio_timeline_summary([])
+        assert s["peak_concurrent_positions"] == 0
+        assert s["peak_open_risk_frac"] == 0.0
+        assert s["max_dd"] == 0.0
+        assert s["equity_curve"].empty
 
 
 # ===========================================================================

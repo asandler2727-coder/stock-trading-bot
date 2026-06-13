@@ -352,6 +352,41 @@ class TestCacheRoundTrip:
         # Should have 10 rows from the stubbed download, not 5 from cache
         assert len(result) == 10
 
+    @pytest.mark.parametrize(
+        ("internal_symbol", "download_symbol"),
+        [("BRK.B", "BRK-B"), ("MMC", "MRSH"), ("SQ", "XYZ")],
+    )
+    def test_fetch_uses_yfinance_symbol_alias(
+        self,
+        tmp_path,
+        monkeypatch,
+        internal_symbol,
+        download_symbol,
+    ):
+        """Internal cache keys should use the current yfinance ticker."""
+        import stockslab.data as data_mod
+        import yfinance as yf
+
+        monkeypatch.setattr(data_mod, "CACHE_DIR", tmp_path)
+        fresh_df = _make_ohlcv(n=10, start="2021-01-04")
+        seen = []
+
+        def _stub_download(ticker, interval=None, auto_adjust=True, progress=False, **kwargs):
+            seen.append(ticker)
+            df = fresh_df.copy()
+            df.columns = pd.MultiIndex.from_tuples(
+                [(c.capitalize(), ticker) for c in df.columns]
+            )
+            return df
+
+        monkeypatch.setattr(yf, "download", _stub_download)
+
+        result = data_mod.fetch(internal_symbol, "1d", force=True)
+
+        assert seen == [download_symbol]
+        assert len(result) == 10
+        assert (tmp_path / "1d" / f"{internal_symbol}.parquet").exists()
+
 
 # ---------------------------------------------------------------------------
 # Schema normalization tests

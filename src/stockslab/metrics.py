@@ -7,6 +7,7 @@ Frozen API contract signatures (do not change names or return types):
   summarize(trades) -> dict
   equity_curve(trades, risk_frac=0.01) -> pd.Series
   max_drawdown(curve) -> float
+  portfolio_timeline_summary(trades, risk_frac=0.01) -> dict
   phase1_gate(s: dict) -> tuple[bool, list[str]]
   phase2_oos(s: dict) -> tuple[bool, list[str]]
 
@@ -114,11 +115,11 @@ def max_drawdown(curve: pd.Series) -> float:
     float
         Maximum drawdown as a non-negative fraction.
     """
-    if len(curve) <= 1:
+    if len(curve) == 0:
         return 0.0
 
     values = curve.values.astype(float)
-    running_max = values[0]
+    running_max = 1.0
     max_dd = 0.0
     for v in values:
         if v > running_max:
@@ -127,6 +128,78 @@ def max_drawdown(curve: pd.Series) -> float:
         if dd > max_dd:
             max_dd = dd
     return max_dd
+
+
+# ---------------------------------------------------------------------------
+# portfolio_timeline_summary
+# ---------------------------------------------------------------------------
+
+def portfolio_timeline_summary(trades, risk_frac: float = 0.01) -> dict:
+    """Summarize realized-R portfolio exposure on a calendar-day timeline.
+
+    Counts open positions for each calendar day and compounds closed trades on
+    their exit dates using the same R-based fixed-fraction convention as
+    equity_curve(). This is not mark-to-market; it is a concurrency-aware view
+    of realized outcomes and open risk.
+    """
+    if not trades:
+        return {
+            "peak_concurrent_positions": 0,
+            "peak_open_risk_frac": 0.0,
+            "max_dd": 0.0,
+            "equity_curve": pd.Series([], dtype=float),
+            "open_positions": pd.Series([], dtype=int),
+        }
+
+    def calendar_day(value) -> pd.Timestamp:
+        ts = pd.Timestamp(value)
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.normalize()
+
+    trade_days = [
+        (t, calendar_day(t.entry_date), calendar_day(t.exit_date))
+        for t in trades
+    ]
+
+    start = min(entry_day for _, entry_day, _ in trade_days)
+    end = max(exit_day for _, _, exit_day in trade_days)
+    days = pd.date_range(start, end, freq="D")
+
+    events: dict[pd.Timestamp, int] = {}
+    for _, entry_day, exit_day in trade_days:
+        events[entry_day] = events.get(entry_day, 0) + 1
+        after_exit = exit_day + pd.Timedelta(days=1)
+        events[after_exit] = events.get(after_exit, 0) - 1
+
+    open_counts = []
+    current_open = 0
+    for day in days:
+        current_open += events.get(day, 0)
+        open_counts.append(current_open)
+    open_positions = pd.Series(open_counts, index=days, dtype=int)
+
+    exits_by_day: dict[pd.Timestamp, list] = {}
+    for t, _, exit_day in trade_days:
+        day = exit_day
+        exits_by_day.setdefault(day, []).append(t)
+
+    equity = 1.0
+    values = []
+    for day in days:
+        for t in sorted(exits_by_day.get(day, []), key=lambda x: (x.exit_date, x.entry_date, x.symbol)):
+            equity *= 1.0 + t.r_multiple * risk_frac
+        values.append(equity)
+    curve = pd.Series(values, index=days)
+
+    peak_concurrency = int(open_positions.max())
+    return {
+        "peak_concurrent_positions": peak_concurrency,
+        "peak_open_risk_frac": peak_concurrency * risk_frac,
+        "max_dd": max_drawdown(curve),
+        "equity_curve": curve,
+        "open_positions": open_positions,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +324,12 @@ def phase2_oos(s: dict) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     pf_val = s["pf"]
 
-    if not (pf_val > 1.15):
+    if not math.isfinite(pf_val):
+        reasons.append(
+            f"pf is non-finite ({pf_val}) — zero losers in OOS is suspicious; "
+            "not auto-passed"
+        )
+    elif not (pf_val > 1.15):
         reasons.append(f"pf {pf_val:.4f} <= 1.15 (required pf > 1.15)")
 
     return (len(reasons) == 0, reasons)

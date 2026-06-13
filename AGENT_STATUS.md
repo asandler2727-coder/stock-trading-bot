@@ -75,9 +75,14 @@ All agents read and write this file directly — no human courier, no pasting. T
 ## Codex — copilot lane
 
 **Last updated:** 2026-06-12
-**Status:** NEW TASKS — Grok-council remediation (Task A: universe scrub + fixes + regeneration; Task B: portfolio concurrent-DD view)
+**Status:** IDLE
 
 ### Done
+- Completed **Task B: Portfolio-level concurrent-drawdown view**. Added a calendar-day realized-R timeline helper and `scripts/portfolio_view.py`; hand-computed overlap test passes. Mark-to-market variant skipped deliberately for now because it needs open-position daily price reconstruction and is beyond the minimal sizing input.
+- Task B results at 1% risk/trade: donchian IS peak concurrency `113` / peak open risk `113%` / calendar DD `84.21%` vs legacy `84.93%`; donchian OOS peak concurrency `103` / peak open risk `103%` / calendar DD `86.12%` vs legacy `86.12%`; high52 IS peak concurrency `53` / peak open risk `53%` / calendar DD `51.44%` vs legacy `53.34%`; high52 OOS peak concurrency `48` / peak open risk `48%` / calendar DD `35.29%` vs legacy `35.91%`.
+- Completed **Task A: Grok-council remediation**. `universe="all"` now excludes levered/inverse ETFs while `levered_etf_meanrev` keeps its declared levered universe; result contracts flag implausible price scale and set data quality to warning; `max_drawdown` now counts first-trade losses from starting equity; MMC alias verified as correct (`MMC` old ticker now downloads via current Yahoo ticker `MRSH`; cache close sanity: latest `168.68`, plausible vs current MRSH quote range); strict clean-universe regeneration completed.
+- Task A clean-universe fresh results: donchian IS PF `1.5589311189835344` / N `5272`, OOS PF `1.286987383303528` / N `1967` (PASS); high52 IS PF `1.4759744282323888` / N `2051`, OOS PF `1.2096143874165228` / N `679` (PASS); rsi_dip_uptrend IS PF `1.3896276362775726` / N `5358`, warm OOS PF `1.1395704217337903` / N `1969` (FAIL strict `>1.15` OOS gate); bb_squeeze_breakout IS PF `1.3600574523119087` / N `2917`, OOS PF `1.2530221759587192` / N `1344` (PASS).
+- Task A robustness after clean-universe scrub: donchian 2x slippage PF `1.5030782243212608`, min non-slippage PF `1.5219767477897654`; high52 2x slippage PF `1.410029427547485`, min non-slippage PF `1.3950708046925098`; rsi_dip_uptrend 2x slippage PF `1.3270880256575543`, min non-slippage PF `1.2877691086852645`; bb_squeeze_breakout 2x slippage PF `1.3046085659147517`, min non-slippage PF `1.3076926601617969`.
 - Fixed audit-confirmed runner/data issues: missing cached symbols now fail loudly by default (`--allow-missing-cache` required for diagnostic partial-cache runs); OOS runs warm-start from IS history and filter metrics to OOS entries; legacy `results/{strategy}_{split}.json` files refresh again; result contracts now record evaluation range, warmup start, slippage multiplier, requested symbols, and missing symbols; `phase2_oos` no longer auto-passes infinite PF; current Yahoo ticker aliases now preserve internal cache keys for `BRK.B`→`BRK-B`, `MMC`→`MRSH`, and `SQ`→`XYZ`.
 - Tightened the runner CLI so a strict run with missing cache exits nonzero instead of skipping the strategy and returning success. Verified strict `donchian_breakout` IS run stopped on missing cache before the alias/cache fix, then strict regeneration succeeded after fetching the missing files.
 - Regenerated affected daily results in strict full-cache mode. Fresh numbers: donchian IS PF `1.546227264349238` / N `5506`, OOS PF `1.2625405081695291` / N `2056`; high52 IS PF `1.4759744282323888` / N `2051`, OOS PF `1.2096143874165228` / N `679`; rsi_dip_uptrend IS PF `1.3940966758744204` / N `5523`, warm OOS PF `1.1437868403434053` / N `2018` (below strict `>1.15` gate).
@@ -89,10 +94,11 @@ All agents read and write this file directly — no human courier, no pasting. T
 - Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- [ ] **Task A: Grok-council remediation** — universe scrub, contract flag, metrics fix, alias verify, regenerate + re-gate (see task block below)
-- [ ] **Task B: Portfolio-level concurrent-drawdown view** (see task block below; can follow Task A)
+- (None)
 
 ### Task A: Grok-council remediation (universe scrub + fixes + regeneration)
+
+**DONE 2026-06-12.** Summary: levered/inverse ETFs excluded from `universe="all"`; implausible price-scale contract warning added; first-trade drawdown fixed; `MMC -> MRSH` alias verified; strict clean-universe regeneration and robustness complete; tests green (`275 passed`).
 
 **Context:** Austin had Grok review the repo (`GROK_REVIEW.txt`); a Claude council fact-checked it and debated the recommendations. Five concrete changes fell out, then a regeneration. All findings below are verified against the code with file:line evidence — this is remediation, not investigation.
 
@@ -105,6 +111,8 @@ All agents read and write this file directly — no human courier, no pasting. T
 Full test suite green before reporting. Update this section when done.
 
 ### Task B: Portfolio-level concurrent-drawdown view
+
+**DONE 2026-06-12.** Summary: added realized-R calendar timeline and report script; donchian OOS peak concurrency `103` means uncapped 1% risk sizing can stack to `103%` open risk. Full test suite green (`275 passed`).
 
 **Why:** `equity_curve`/`max_dd_1pct` (`metrics.py:85`) compounds trades one-by-one sorted by exit date — concurrent open positions are serialized, so donchian's 71.6% max DD @1% risk is a *floor*, not the real portfolio number. Austin can't pick harness sizing (the open question for donchian) without a concurrency-aware estimate. This is the sizing input for the paper-trade harness.
 
@@ -120,11 +128,11 @@ Hand-computed test for the concurrency counting (e.g. 3 overlapping trades → p
 
 - New strategy name: `rsi_dip_uptrend`
 - Canonical rule now implemented: `entry_long = (close > ema200) & (rsi(rsi_n) < rsi_thresh) & atr.notna()`
-- IS reproduced after full-cache regeneration: PF `1.3940966758744204`, N `5523`
+- IS reproduced after clean-universe regeneration: PF `1.3896276362775726`, N `5358`
 - Original cold-sliced OOS result: PF `1.2901913080388698`, N `1649`
-- Warm-started OOS after runner fix and full-cache regeneration: PF `1.1437868403434053`, N `2018` — below strict `>1.15` gate
-- Robustness regenerated without dead EMA knobs; 2x slippage PF `1.3326295744966945`, min non-slippage robustness PF `1.2912762214756133`
-- Full test suite after audit fixes: `270 passed`; contract schema/examples validate
+- Warm-started OOS after runner fix and clean-universe regeneration: PF `1.1395704217337903`, N `1969` — below strict `>1.15` gate
+- Robustness regenerated without dead EMA knobs; 2x slippage PF `1.3270880256575543`, min non-slippage robustness PF `1.2877691086852645`
+- Full test suite after Task B fixes: `275 passed`; contract schema/examples validate
 - Dashboard verified at `http://localhost:8080/docs/dashboard_results.html`: 12 rows, 11 charts, `Rsi Dip Uptrend` row present, no browser console errors, no mobile page overflow
 - Not paper-trade-ready by Codex decision; hand back to Claude to confirm the edge survived before re-entering the ranking
 

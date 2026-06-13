@@ -92,6 +92,12 @@ _MEGACAP_STOCKS: set[str] = {
     "CSCO", "ABT", "BAC",
 }
 
+_YFINANCE_SYMBOL_ALIASES: dict[str, str] = {
+    "BRK.B": "BRK-B",
+    "MMC": "MRSH",
+    "SQ": "XYZ",
+}
+
 
 def _build_universe() -> dict[str, dict]:
     u: dict[str, dict] = {}
@@ -303,7 +309,8 @@ def fetch(
     last_exc: Exception = RuntimeError("No attempts made")
     for attempt in range(3):
         try:
-            raw = yf.download(symbol, interval=interval, **dl_kwargs)
+            download_symbol = _YFINANCE_SYMBOL_ALIASES.get(symbol, symbol)
+            raw = yf.download(download_symbol, interval=interval, **dl_kwargs)
             if raw is None or raw.empty:
                 raise ValueError(f"yfinance returned empty DataFrame for {symbol}")
             df = _normalize(raw, interval)

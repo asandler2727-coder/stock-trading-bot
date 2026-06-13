@@ -133,3 +133,48 @@ def test_round_trip_synthetic(validator):
             sid = t["source_signal_id"]
             assert sid is not None
             assert sid in signal_ids
+
+
+def test_implausible_price_scale_flag(validator):
+    class MockStrategy(SignalStrategy):
+        name = "mock_strat"
+        version = "1.0"
+        timeframe = "1d"
+        universe = "test"
+        live_capable = False
+        params = {}
+        entry_at_open = False
+        target_r = None
+        trail_atr_mult = None
+        time_stop_bars = None
+        session_exit = False
+
+        def generate(self, df):
+            sigs = pd.DataFrame(index=df.index)
+            sigs["entry_long"] = False
+            sigs["exit_long"] = False
+            sigs["stop_dist"] = 1.0
+            return sigs
+
+    dates = pd.date_range("2024-01-01", periods=3, freq="D")
+    df = pd.DataFrame({
+        "open": [10.0, 20.0, 2_000_000.0],
+        "high": [11.0, 21.0, 2_000_001.0],
+        "low": [9.0, 19.0, 1_999_999.0],
+        "close": [10.0, 20.0, 2_000_000.0],
+        "volume": [100, 100, 100],
+    }, index=pd.DatetimeIndex([d.replace(tzinfo=None) for d in dates]))
+
+    metadata = {
+        "run_id": "test_run",
+        "repo_commit": "abcdef0",
+        "interval": "1d",
+        "split_label": "IS",
+    }
+
+    res = result_contract.build_backtest_result(MockStrategy(), {"UVXY": df}, [], metadata)
+
+    assert res["data_quality"]["status"] == "warning"
+    assert "implausible_price_scale:UVXY" in res["data_quality"]["flags"]
+    assert "implausible_price_scale" in res["caveats"]
+    assert not list(validator.iter_errors(res))

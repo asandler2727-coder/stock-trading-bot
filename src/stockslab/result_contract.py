@@ -264,11 +264,28 @@ def build_backtest_result(
     if any(UNIVERSE.get(s, {}).get("kind") == "stock" for s in panel.keys()):
         data_quality_flags.append("survivorship_bias_stocks")
 
+    implausible_price_symbols = []
+    for sym, df in panel.items():
+        if "close" not in df or df["close"].empty:
+            continue
+        closes = df["close"].dropna().astype(float)
+        positive_closes = closes[closes > 0]
+        if positive_closes.empty:
+            continue
+        max_close = float(positive_closes.max())
+        min_close = float(positive_closes.min())
+        if max_close > 1_000_000 or max_close / min_close > 1_000:
+            implausible_price_symbols.append(sym)
+    for sym in implausible_price_symbols:
+        data_quality_flags.append(f"implausible_price_scale:{sym}")
+
     caveats = ["prices_adjusted"]
     if interval in ["1h", "5m"]:
         caveats.extend(["intraday_bar_label_convention", "thin_intraday_history"])
     if any(UNIVERSE.get(s, {}).get("kind") == "stock" for s in panel.keys()):
         caveats.append("survivorship_bias_stocks")
+    if implausible_price_symbols:
+        caveats.append("implausible_price_scale")
     caveats.append("long_only_engine")
     if is_rotation:
         caveats.append("Rotation strategy uses R-proxy based on notional 10% move")
@@ -309,15 +326,26 @@ def build_backtest_result(
                 "start": start_str,
                 "end": end_str
             },
+            "evaluation_range": {
+                "start": run_metadata.get("evaluation_start") or start_str,
+                "end": run_metadata.get("evaluation_end") or end_str
+            },
+            "warmup_start": run_metadata.get("warmup_start"),
             "split_label": run_metadata["split_label"],
             "live_price_required_for_sizing": True,
-            "bars_per_symbol": {sym: len(df) for sym, df in panel.items()}
+            "bars_per_symbol": {sym: len(df) for sym, df in panel.items()},
+            "requested_symbols": run_metadata.get("requested_symbols"),
+            "missing_symbols": run_metadata.get("missing_symbols", [])
         },
         "sim_assumptions": {
             "engine_semantics_version": "1.0",
             "slippage_model": {
                 "type": "per_side_bps_by_tier",
-                "tiers_bps": {str(k): float(v) for k, v in engine.TIER_BPS.items()},
+                "tiers_bps": {
+                    str(k): float(v) * float(run_metadata.get("slippage_mult", 1.0))
+                    for k, v in engine.TIER_BPS.items()
+                },
+                "multiplier": float(run_metadata.get("slippage_mult", 1.0)),
                 "applied": "both_sides",
                 "symbol_tier": {sym: int(UNIVERSE.get(sym, {"tier": 3}).get("tier", 3)) for sym in panel.keys()}
             },
@@ -358,7 +386,7 @@ def build_backtest_result(
             "exit_reason_counts": {str(k): int(v) for k, v in summary.get("exit_reason_counts", {}).items()}
         },
         "data_quality": {
-            "status": "warning" if interval in ["1h", "5m"] else "ok",
+            "status": "warning" if interval in ["1h", "5m"] or implausible_price_symbols else "ok",
             "flags": data_quality_flags
         },
         "caveats": caveats

@@ -155,12 +155,24 @@
             "end": { "type": "string" }
           }
         },
+        "evaluation_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": ["string", "null"] },
+            "end": { "type": ["string", "null"] }
+          }
+        },
+        "warmup_start": { "type": ["string", "null"] },
         "split_label": { "enum": ["IS", "OOS", "full"] },
         "live_price_required_for_sizing": {
           "type": "boolean",
           "description": "Machine-readable enforcement of the prices_adjusted caveat. True whenever adjustment != 'raw'. The copilot's size_calculator MUST re-fetch a raw live quote before computing any dollar size — it may NOT size from the adjusted prices/stop_dist in this contract."
         },
-        "bars_per_symbol": { "type": ["object", "null"], "additionalProperties": { "type": "integer" } }
+        "bars_per_symbol": { "type": ["object", "null"], "additionalProperties": { "type": "integer" } },
+        "requested_symbols": { "type": ["array", "null"], "items": { "type": "string" } },
+        "missing_symbols": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
     "sim_assumptions": {
@@ -176,6 +188,7 @@
           "properties": {
             "type": { "const": "per_side_bps_by_tier" },
             "tiers_bps": { "type": "object", "additionalProperties": { "type": "number" } },
+            "multiplier": { "type": "number" },
             "applied": { "const": "both_sides" },
             "symbol_tier": { "type": "object", "additionalProperties": { "type": "integer", "enum": [1, 2, 3] } }
           }
