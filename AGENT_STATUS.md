@@ -49,18 +49,27 @@ All agents read and write this file directly — no human courier, no pasting. T
 1. D2 called ema_pullback "not viable" — now gate passer #5 after the bug fix
 2. D2 called levered_etf_meanrev OOS>IS "data mining" — AGY confirmed it's the QQQ filter working correctly (filter blocked all 2022 trades; 2018 PF=0.57, 2019 PF=0.78 hurt IS). Still a gate fail (IS PF=1.116) but mechanically explained, not overfit
 
-**Paper-trade ranking (updated 2026-06-12, Grok council):**
-1. **donchian_breakout** — highest confidence; simplest logic; cleanest audit. GO needs re-ratification on clean-universe regeneration (UVXY was in its universe; measured impact small).
-2. **high52_breakout** — clean audit; strong diversification. Caveat for re-ratification: zero 2022 OOS trades → its OOS PF never sampled a bear.
-3. **xsec_momentum** — strong edge but needs regime detection + position sizing controls
-4. **bb_squeeze_breakout** — most marginal; lowest priority
-- ~~rsi_dip_uptrend~~ — ❌ **REMOVED from ranking.** Warm-start OOS PF 1.1438 < 1.15 phase2 gate; contract on disk records `passed: false`. "Verified" meant "reproduces," not "passes." May re-enter only if it passes warm-start OOS on the levered-ETF-excluded universe after Codex's regeneration.
+**✅ PAPER-TRADE GO DECISION (2026-06-13, Austin — ratified on clean-universe + AGY-verified numbers):**
+
+> **Scope: GO for PAPER, not real money.** The point is operational proof — signal generation, sizing, logs, fills, monitoring, and whether the edge behaves live-ish. Not capital deployment.
+>
+> **Two discounts apply to every reported PF below (read them as optimistic ceilings, haircut mentally):**
+> 1. **Survivorship** — the 2026 universe is 100% current survivors, so all PFs are optimistic ceilings.
+> 2. **Selection** — these are survivors of a 12-strategy sweep on one OOS window with no multiple-testing correction; reported PFs should be mentally haircut.
+
+| Strategy | Decision | Sizing / caps | Notes |
+|---|---|---|---|
+| **high52_breakout** | ✅ **GO** | standard (cleaner profile) | Lower concurrency + DD. Caveat: zero 2022 OOS trades — may be the strategy self-throttling in bear regimes (a feature, not a bug). |
+| **donchian_breakout** | ✅ **GO — capped** | **start 0.25% risk/trade, max 25 open positions (~6.25% open-risk ceiling)** | Not at uncapped 1%. Future test *(not start)*: 0.5% risk, max 20 positions. The 103-concurrency finding forces the cap. |
+| **bb_squeeze_breakout** | ⏸ **REVIEW — NO GO yet** | — | Newly passes after the scrub (OOS 1.253) but NOT independently verified. Must clear the same AGY-style battery donchian/high52 passed before it can be ratified. |
+| ~~rsi_dip_uptrend~~ | ❌ **OUT** | — | Warm OOS 1.140 < 1.15; contract records `passed:false`. |
+| xsec_momentum | not promoted | — | Strong edge but needs regime detection + sizing controls first. |
 
 ### Open (engine lane)
 - [x] ~~Paper-trade go/no-go for donchian + high52~~ — **APPROVED GO on both (Austin, this session).** Spec-clean (Codex + D2), robust above gate IS+OOS+2× slippage. NOTE: donchian max DD @1% risk = 71.6% → wants fractional sizing. high52 = 27.7%, the smooth one. **No paper-trade harness exists yet → next build.**
 - [x] ~~PRE-HARNESS (from audit): fix runner + regenerate~~ — **DONE by Codex** (warm-start OOS, missing-cache guard, slippage_mult in contract, inf auto-pass fix, aliases, full strict regeneration). Superseded by round 2 below.
 - [x] ~~**PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.**~~ **DONE + Claude-verified + AGY-verified (2026-06-13).** Codex shipped Task A (universe scrub, price-plausibility flag, max_dd seeding fix, MMC→MRSH alias confirmed correct — Yahoo reindexed Marsh & McLennan) + Task B (portfolio concurrency view). Claude verified all 16 numbers match disk, 275 tests green. AGY independent battery (donchian+high52): recompute matches, no lookahead, ledgers clean, high52 not penny-stock-dependent (5.68% of R). Clean numbers: donchian IS 1.559/5272 OOS 1.287/1967 PASS; high52 1.476/2051 OOS 1.210/679 PASS; bb_squeeze 1.360/2917 OOS 1.253/1344 PASS (newly); rsi_dip 1.390/5358 OOS 1.140/1969 FAIL. **Headline sizing input: donchian OOS peak concurrency 103 = 103% open risk @1%/trade.**
-- [ ] **GO re-ratification (Austin decision, after round 2):** re-confirm donchian + high52 GO on clean-universe numbers, with two discounts written down explicitly: survivorship (100%-survivor universe flatters breakout strategies most) and selection bias (5 passers out of 12 strategies tested on one OOS window, no multiple-testing correction).
+- [x] ~~**GO re-ratification (Austin decision, after round 2)**~~ — **DONE (2026-06-13).** high52 GO; donchian GO capped at 0.25% risk / max 25 positions; bb_squeeze stays REVIEW pending AGY battery; both discounts recorded. See GO DECISION table above.
 - [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/).
 - [ ] **Build paper-trade harness** for donchian + high52 — **NOW UNBLOCKED** (round 2 regeneration + concurrency number both exist). Position sizing (donchian needs ≤0.5% risk AND a concurrency cap — 103 simultaneous positions at 1% = 103% open risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Gated only on GO re-ratification below.
 - [ ] README.md — post-harness, deliberately deferred (Grok wanted it near-blocking; council demoted: audience is hypothetical, harness is concrete).
