@@ -106,13 +106,30 @@ All agents read and write this file directly — no human courier, no pasting. T
 - Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- [ ] **Paper-trade harness implementation — STANDBY, DO NOT START.** Blocked on Claude+Austin locking the harness design (in-session this round). Full spec + file layout will land in this section once the design doc is committed. Pre-committed constraints so you have context (these are decided, not open for redesign):
+- [ ] **GO NOW — Design review (READ-ONLY) of the paper-trade harness spec.** See Task block below. This is the premium-council review *before* implementation. Read-only: review the design, do NOT write harness code yet.
+- [ ] **Paper-trade harness implementation — STANDBY, DO NOT START.** Blocked on Claude+Austin locking the harness design (post-council). Full spec + file layout will land in this section once the design is ratified. The spec draft is committed at `docs/superpowers/specs/2026-06-13-paper-trade-harness-design.md` — review it (task above), but do not implement against it until it's marked ratified. Pre-committed constraints so you have context (these are decided, not open for redesign):
   - **SQLite ledger from day one** — `signals` / `trades` / `runs` tables, not flat files.
   - **Sizing engine enforces donchian's cap:** start **0.25% risk/trade, max 25 concurrent open positions** (~6.25% open-risk ceiling). 0.5% risk / max-20 is a *later* test, NOT the start. high52 runs standard sizing.
   - **Inert sentiment/catalyst annotation field** per signal — passive logging only, builds a future backtestable dataset; it is **never** an input to sizing or entries.
   - **Descriptive/prescriptive wall:** the engine stays purely descriptive; the harness/rules layer owns ALL live risk policy (sizing, caps, regime gating). Don't push risk policy down into the strategies.
   - Wire results through the existing result-contract; reuse `scripts/portfolio_view.py`'s concurrency accounting for the cap enforcement.
 - [ ] **DEFERRED (low priority, not blocking):** xsec_momentum off-by-one momentum index + Monday-holiday rebalance fallback fix; levered_etf_meanrev longer-IS-window re-evaluation. Only if/when those strategies are revisited — neither is on the GO path.
+
+### Task: Design review of paper-trade harness spec (READ-ONLY — premium council)
+
+**GO NOW. READ-ONLY — do NOT write harness code.** You are the engineering seat on the design council (alongside an internal Claude critic panel + AGY's mechanical fact-check). You built `engine.py`, so you're the right reviewer for refactor feasibility.
+
+**Read:** `docs/superpowers/specs/2026-06-13-paper-trade-harness-design.md` (full spec). Then review against the actual code (`src/stockslab/engine.py`, `metrics.py`, `data.py`, `result_contract.py`, `scripts/portfolio_view.py`). Use `.venv/bin/python` for any checks.
+
+**Do NOT relitigate the three locked decisions in §2** (sim next-open fills / neutral-deterministic cap drop / shared `step_position` core). Those are inputs. Critique their *execution* and risks.
+
+**Focus where your engine knowledge is decisive:**
+1. **`step_position` extraction (§4) — is it actually behavior-preserving-feasible?** Mark exactly where the per-bar block starts/ends in `run_signal_backtest`'s loop, what state must be threaded through `(state, bar, params, slip)`, and any hidden coupling (e.g. `atr14` precompute, `pending_exit`, `bars_held`, the trailing-stop-on-close update, `_is_last_bar_of_session`) that makes a clean extract harder than it looks. Is the proposed signature sufficient?
+2. **Golden-equivalence bar (Q2):** from an implementer's view, is bit-for-bit reproduction achievable, or is "exact trade-list match to full float precision" the right target? What specifically would break bit-exactness?
+3. **Implementation feasibility of the whole design:** any module in §3 that's underspecified to build? Any place the daily-run flow (§5) is ambiguous or wrong vs the engine's bar semantics?
+4. **The 6 open questions (§11)** — weigh in on any where the implementation reality changes the answer, especially Q3 (yfinance re-adjustment under open positions) and Q6 (pending-order lifecycle).
+
+**Output:** write findings into this Codex section — a feasibility verdict on the refactor (GREEN / needs-changes / blocked), a must-fix list (concrete design gaps that would bite implementation), and your take on the open questions. Commit your own section. Do NOT edit other lanes' sections or the spec file (Claude folds all council findings into the spec revision).
 
 ### Task A: Grok-council remediation (universe scrub + fixes + regeneration)
 
@@ -226,8 +243,9 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 
 ### Open
 - [x] **Independent verification battery** (donchian + high52) — **DONE**. See docs/REPORT_AGY_verification.md.
-- [ ] **bb_squeeze_breakout verification battery** (replay the donchian/high52 battery) — see Task block below.
+- [ ] **bb_squeeze_breakout verification battery** (replay the donchian/high52 battery) — see Task block below. **(higher priority — gates bb_squeeze ratification)**
 - [ ] **Artifact triage** (gitignore + commit the real work products) — see Task block below.
+- [ ] **Design-spec fact-check** (mechanical claim verification of the harness spec) — see Task block below. Independent of the battery; run in either order.
 
 ### Task: bb_squeeze_breakout verification battery (READ-ONLY recompute) + artifact triage
 
@@ -260,6 +278,26 @@ The working tree has untracked artifacts. Do exactly this — no other deletions
 - Suggested commit message: `chore: bb_squeeze verification battery + artifact triage (gitignore .hermes/HANDOFF; commit Grok trail + audit reports)`.
 
 **When done:** write a 3–4 line summary into this AGY section (bb_squeeze battery verdict — PASS or anomalies with numbers; what was committed/ignored), set Status to IDLE, and commit your own AGENT_STATUS edit. Claude reads your verdict and makes the bb_squeeze ratify call.
+
+### Task: Design-spec fact-check (READ-ONLY mechanical verification — premium council)
+
+**READ-ONLY.** You are the mechanical-verification seat on the design council. Your job is NOT to opine on the architecture — it's to confirm the spec's **factual claims about the code are true**, with `file:line` evidence. Use `.venv/bin/python`.
+
+**Read:** `docs/superpowers/specs/2026-06-13-paper-trade-harness-design.md`. For each cited fact below, report **PASS** (claim matches code, with file:line) or **MISMATCH** (what the code actually says):
+
+1. Engine fills entries at `open[t+1]` (next-open) — spec §2.1 cites `engine.py:6`.
+2. Backtest uses `n_shares = 1.0` / pure R-multiple accounting, no real sizing — spec §3 cites `engine.py:112`.
+3. `r_multiple = (exit - entry) / stop_dist_initial` — spec §7 cites `engine.py:17`.
+4. One-position-per-symbol / no pyramiding — spec §4 cites `engine.py:15`.
+5. Engine skips entry when `stop_dist` is NaN or ≤ 0 — spec §7 cites `engine.py:18`.
+6. The frozen exit check order is gap_stop → stop → target → signal → time → session — spec §4 cites `engine.py:5-16`.
+7. `metrics.equity_curve` / `max_dd_1pct` compounds realized trades by exit date (the convention the spec's equity model claims to match) — confirm it exists and describe how it compounds.
+8. `metrics.portfolio_timeline_summary` exists and computes peak concurrency / open-risk (spec §3 says the harness reuses it) — confirm signature + what it returns.
+9. `result_contract.py` field set — list the fields a live run would emit into, so we know what the harness must populate.
+
+**Plus — establish the golden-equivalence baseline:** run `.venv/bin/python -m pytest tests/ -q` and report the exact pass count NOW (pre-refactor). This is the baseline the `step_position` refactor must preserve.
+
+**Output:** write a PASS/MISMATCH table + the baseline test count into this AGY section. Commit your own section. Do NOT edit the spec file or other lanes.
 
 ### Task: Repo hygiene (mechanical, from Grok review — run now)
 
