@@ -74,7 +74,7 @@ All agents read and write this file directly — no human courier, no pasting. T
 - [x] ~~PRE-HARNESS (from audit): fix runner + regenerate~~ — **DONE by Codex** (warm-start OOS, missing-cache guard, slippage_mult in contract, inf auto-pass fix, aliases, full strict regeneration). Superseded by round 2 below.
 - [x] ~~**PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.**~~ **DONE + Claude-verified + AGY-verified (2026-06-13).** Codex shipped Task A (universe scrub, price-plausibility flag, max_dd seeding fix, MMC→MRSH alias confirmed correct — Yahoo reindexed Marsh & McLennan) + Task B (portfolio concurrency view). Claude verified all 16 numbers match disk, 275 tests green. AGY independent battery (donchian+high52): recompute matches, no lookahead, ledgers clean, high52 not penny-stock-dependent (5.68% of R). Clean numbers: donchian IS 1.559/5272 OOS 1.287/1967 PASS; high52 1.476/2051 OOS 1.210/679 PASS; bb_squeeze 1.360/2917 OOS 1.253/1344 PASS (newly); rsi_dip 1.390/5358 OOS 1.140/1969 FAIL. **Headline sizing input: donchian OOS peak concurrency 103 = 103% open risk @1%/trade.**
 - [x] ~~**GO re-ratification (Austin decision, after round 2)**~~ — **DONE (2026-06-13).** high52 GO; donchian GO capped at 0.25% risk / max 25 positions; bb_squeeze stays REVIEW pending AGY battery; both discounts recorded. See GO DECISION table above.
-- [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/). Trace origin in `docs/superpowers/plans/2026-06-12-two-track-stock-research.md`.
+- [x] ~~**Gate provenance note**~~ — **DONE (2026-06-13) → `docs/gate_provenance.md`.** Verdict: thresholds are **pre-registered and never tuned** — defined in repo commits #1–#2 (design spec `33d98aa` + plan `3af3243`) before the engine existed; `git log -S` pickaxe shows each threshold expression written once in `ac94fdd` and never modified. IS PF>1.3 / n≥500 are **inherited from prior crypto/Kalshi (mm-bot) research**, not invented here; OOS PF>1.15 is a degradation haircut off the IS bar. rsi_dip's 1.140<1.15 fail is a pre-registered line holding, not a post-hoc exclusion. Honest caveat recorded: pre-registration ≠ multiple-testing correction (still the open methodology item).
 - [ ] **Methodology backlog (design only, not blocking the harness):** (a) multiple-testing correction across the 12-strategy sweep — pick a method (Bonferroni floor vs White's Reality Check / SPA vs deflated Sharpe) and write down what the corrected bar would be; (b) walk-forward / rolling-window validation to replace the single IS→OOS split (high52 has zero 2022 OOS trades — one window can't sample the bear). Deliverable is a methodology note, not code. Feeds future gate revisions, not the paper-trade GO.
 - [ ] **Build paper-trade harness** for donchian + high52 — **NOW UNBLOCKED** (round 2 regeneration + concurrency number both exist). Position sizing (donchian needs ≤0.5% risk AND a concurrency cap — 103 simultaneous positions at 1% = 103% open risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Gated only on GO re-ratification below.
 - [ ] README.md — post-harness, deliberately deferred (Grok wanted it near-blocking; council demoted: audience is hypothetical, harness is concrete).
@@ -272,7 +272,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 
 ### Open
 - [x] **Independent verification battery** (donchian + high52) — **DONE**. See docs/REPORT_AGY_verification.md.
-- [ ] **Design-spec fact-check** (mechanical claim verification of the harness spec) — see Task block below. **★ PRIORITY 1 — the only missing council input; gates spec ratification.**
+- [x] **Design-spec fact-check** (mechanical claim verification of the harness spec) — **DONE**. See completion report.
 - [ ] **bb_squeeze_breakout verification battery** (replay the donchian/high52 battery) — see Task block below. **(priority 2 — gates bb_squeeze's inclusion in the harness)**
 - [ ] **Artifact triage** (gitignore + commit the real work products) — see Task block below. **(priority 3 — mechanical hygiene, do after the two reviews)**
 
@@ -371,6 +371,19 @@ Four independent items. None touch `src/` logic or `results/`. Use `.venv/bin/py
 - **Recomputation & Doc Check**: PASS. Recomputed PFs (R-Multiple) exactly match JSONs and Codex's Task A numbers. Dollar P&L PF differs slightly, confirming the JSON PF relies on R-Multiples.
 - **Sanity & Causality**: PASS. All trade ledgers have valid dates, no NaNs, exit reasons sum to `n`. Pytest and split spot-checks show no lookahead bias.
 - **Data & Penny Stocks**: Data has some typical anomalies (e.g. zero/neg volume or prices in MARA). `high52` has 66 sub-$5 entry trades which account for only 5.68% of total R (edge does not lean on penny stocks).
+
+**Completion Report (Design-Spec Fact-Check):**
+- **Baseline Test Count**: `.venv/bin/python -m pytest tests/ -q` ran 275 passed in 0.87s (green) pre-refactor.
+- **PASS/MISMATCH Table**:
+  1. Engine fills entries at open[t+1] (next-open) — **PASS** (`src/stockslab/engine.py:6`).
+  2. Backtest uses n_shares = 1.0 / pure R-multiple accounting, no real sizing — **PASS** (`src/stockslab/engine.py:112`).
+  3. r_multiple = (exit - entry) / stop_dist_initial — **PASS** (`src/stockslab/engine.py:17`).
+  4. One-position-per-symbol / no pyramiding — **PASS** (`src/stockslab/engine.py:15`).
+  5. Engine skips entry when stop_dist is NaN or ≤ 0 — **PASS** (`src/stockslab/engine.py:18`).
+  6. The frozen exit check order is gap_stop → stop → target → signal → time → session — **PASS** (`src/stockslab/engine.py:8-12` and line 128).
+  7. `metrics.equity_curve` / `max_dd_1pct` compounds realized trades by exit date — **PASS** (`src/stockslab/metrics.py:86-93`). Trades are sorted by `exit_date`, and for each trade, `equity *= 1.0 + t.r_multiple * risk_frac` is compounded chronologically.
+  8. `metrics.portfolio_timeline_summary` exists and computes peak concurrency / open-risk — **PASS** (`src/stockslab/metrics.py:137`). Signature `portfolio_timeline_summary(trades, risk_frac: float = 0.01) -> dict`. It returns a dict with `peak_concurrent_positions`, `peak_open_risk_frac`, `max_dd`, `equity_curve`, and `open_positions`.
+  9. `result_contract.py` field set — **PASS**. A full run emits: `result_contract_version`, `run_id`, `generated_at`, `repo_commit`, `payload_type`, `strategy`, `symbols`, `data`, `sim_assumptions`, `signals`, `empirical_risk_stats`, `data_quality`, `caveats`, `trades` (optional), `per_symbol_stats` (optional), and `research_status`.
 
 ---
 
