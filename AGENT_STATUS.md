@@ -59,10 +59,10 @@ All agents read and write this file directly — no human courier, no pasting. T
 ### Open (engine lane)
 - [x] ~~Paper-trade go/no-go for donchian + high52~~ — **APPROVED GO on both (Austin, this session).** Spec-clean (Codex + D2), robust above gate IS+OOS+2× slippage. NOTE: donchian max DD @1% risk = 71.6% → wants fractional sizing. high52 = 27.7%, the smooth one. **No paper-trade harness exists yet → next build.**
 - [x] ~~PRE-HARNESS (from audit): fix runner + regenerate~~ — **DONE by Codex** (warm-start OOS, missing-cache guard, slippage_mult in contract, inf auto-pass fix, aliases, full strict regeneration). Superseded by round 2 below.
-- [ ] **PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.** Codex tasks issued (see Codex section): exclude levered ETFs from `universe="all"`, price-plausibility data_quality flag, max_dd seeding fix, MMC→MRSH alias verify/fix, regenerate + re-gate donchian/high52/rsi_dip; plus portfolio-level concurrent-DD view (the harness sizing input — single-stream 71.6% donchian DD is a floor). AGY hygiene task issued in parallel.
+- [x] ~~**PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.**~~ **DONE + Claude-verified + AGY-verified (2026-06-13).** Codex shipped Task A (universe scrub, price-plausibility flag, max_dd seeding fix, MMC→MRSH alias confirmed correct — Yahoo reindexed Marsh & McLennan) + Task B (portfolio concurrency view). Claude verified all 16 numbers match disk, 275 tests green. AGY independent battery (donchian+high52): recompute matches, no lookahead, ledgers clean, high52 not penny-stock-dependent (5.68% of R). Clean numbers: donchian IS 1.559/5272 OOS 1.287/1967 PASS; high52 1.476/2051 OOS 1.210/679 PASS; bb_squeeze 1.360/2917 OOS 1.253/1344 PASS (newly); rsi_dip 1.390/5358 OOS 1.140/1969 FAIL. **Headline sizing input: donchian OOS peak concurrency 103 = 103% open risk @1%/trade.**
 - [ ] **GO re-ratification (Austin decision, after round 2):** re-confirm donchian + high52 GO on clean-universe numbers, with two discounts written down explicitly: survivorship (100%-survivor universe flatters breakout strategies most) and selection bias (5 passers out of 12 strategies tested on one OOS window, no multiple-testing correction).
 - [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/).
-- [ ] **Build paper-trade harness** for donchian + high52: position sizing (donchian needs ≤0.5% risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Blocked on round 2 regeneration + concurrent-DD number.
+- [ ] **Build paper-trade harness** for donchian + high52 — **NOW UNBLOCKED** (round 2 regeneration + concurrency number both exist). Position sizing (donchian needs ≤0.5% risk AND a concurrency cap — 103 simultaneous positions at 1% = 103% open risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Gated only on GO re-ratification below.
 - [ ] README.md — post-harness, deliberately deferred (Grok wanted it near-blocking; council demoted: audience is hypothetical, harness is concrete).
 - [x] ~~Codex task: verify ema_pullback params wired~~ — RESOLVED by Claude: wired correctly, but conditions inert (see details). Now a strategy-design decision, not a wiring fix.
 - [x] ~~ema_pullback design decision~~ — **DECIDED (Austin): accept as RSI-dip.** Codex task issued: rename/re-spec to reflect it's an RSI-dip-in-uptrend strategy, drop dead ema_fast/ema_mid params, rewrite the vacuous test with entry-generating data.
@@ -192,7 +192,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 ## AGY — mechanical lane
 
 **Last updated:** 2026-06-12
-**Status:** NEW TASKS — repo hygiene (run now) + verification battery (⚠️ HOLD until Codex Task A regeneration lands — verify the FRESH ledgers, not the current ones)
+**Status:** IDLE
 
 ### Done
 - Implemented result emitter (9774a2b)
@@ -207,7 +207,7 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 - **Repo hygiene**: Pinned dependencies in `requirements.txt`, deleted session scratch scripts (`test_ema*.py`, `analyze_etf.py`, `audit_trades.py`), and removed root `dashboard.html`. Test suite green.
 
 ### Open
-- [ ] **Independent verification battery** (donchian + high52) — ⚠️ ON HOLD until Codex Task A regeneration finishes (Codex is excluding levered ETFs from the universe and regenerating all ledgers; verifying the current files would verify numbers about to be superseded). See task below.
+- [x] **Independent verification battery** (donchian + high52) — **DONE**. See docs/REPORT_AGY_verification.md.
 
 ### Task: Repo hygiene (mechanical, from Grok review — run now)
 
@@ -247,6 +247,11 @@ Four independent items. None touch `src/` logic or `results/`. Use `.venv/bin/py
 6. **Doc cross-check.** Confirm the donchian + high52 PF/n in `AGENT_STATUS.md` (Claude table) and `docs/REPORT_D2.md` match the JSONs. Report any mismatch.
 
 **Output:** write findings to `docs/REPORT_AGY_verification.md` — one section per check, PASS or anomaly with numbers. Then update this AGY section with a 3-4 line summary + set Status to IDLE.
+
+**Completion Report (Verification Battery):**
+- **Recomputation & Doc Check**: PASS. Recomputed PFs (R-Multiple) exactly match JSONs and Codex's Task A numbers. Dollar P&L PF differs slightly, confirming the JSON PF relies on R-Multiples.
+- **Sanity & Causality**: PASS. All trade ledgers have valid dates, no NaNs, exit reasons sum to `n`. Pytest and split spot-checks show no lookahead bias.
+- **Data & Penny Stocks**: Data has some typical anomalies (e.g. zero/neg volume or prices in MARA). `high52` has 66 sub-$5 entry trades which account for only 5.68% of total R (edge does not lean on penny stocks).
 
 ---
 
