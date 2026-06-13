@@ -8,7 +8,7 @@ All agents read and write this file directly — no human courier, no pasting. T
 
 ## Claude — engine / research lane
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-06-13
 **Status:** ACTIVE
 
 ### Done this session
@@ -24,17 +24,19 @@ All agents read and write this file directly — no human courier, no pasting. T
 
 ### Phase D results
 
-> ⚠️ **2026-06-12 audit:** donchian + high52 rows below are STALE — computed mid-download on ~68/156 symbols (see `docs/REPORT_fable_audit.md` F1). Full-universe repro: donchian IS 1.548/5394, OOS 1.276/1969; high52 IS 1.482/2001, OOS 1.281/601 — still gate-passing. rsi_dip rows reproduce exactly, but warm-started OOS ≈ 1.15 (F2).
+> ✅ **2026-06-13 — table refreshed to clean-universe, AGY-verified numbers.** Rows below match `results/*.json` on disk (post-Grok-council universe scrub + warm-start OOS fix). Verdicts reflect the ratified PAPER-TRADE GO decision (see GO table below). Both optimism discounts (survivorship + selection) still apply — read PFs as ceilings. The earlier mid-download numbers are retired; see `docs/REPORT_fable_audit.md` F1 for how they were caught.
 
-**5 gate passers (ema_pullback added after AGY bug fix):**
+**5 gate passers (clean-universe regeneration, ratified 2026-06-13):**
 
-| Strategy | IS PF | IS N | OOS PF | Min robustness PF | Verdict |
-|---|---|---|---|---|---|
-| xsec_momentum | 3.326 | 651 | 2.212 | — | REVIEW (regime + concentration) |
-| donchian_breakout | 1.624 | 2698 | 1.361 | 1.50 | CONFIRM |
-| high52_breakout | 1.515 | 812 | 1.322 | — | CONFIRM |
-| rsi_dip_uptrend (was ema_pullback) | 1.387 | 5423 | 1.290 | 1.28 | ✅ REWORKED — RSI-dip; edge Claude-verified |
-| bb_squeeze_breakout | 1.313 | 1471 | 1.171 | — | REVIEW (marginal edge) |
+| Strategy | IS PF | IS N | OOS PF | OOS N | Min robustness PF | Verdict |
+|---|---|---|---|---|---|---|
+| xsec_momentum | 3.326 | 651 | 2.212 | 216 | — | not promoted — needs regime detection + sizing controls first |
+| donchian_breakout | 1.559 | 5272 | 1.287 | 1967 | 1.50 | ✅ GO — capped (0.25% risk/trade, max 25 open) |
+| high52_breakout | 1.476 | 2051 | 1.210 | 679 | 1.40 | ✅ GO — standard sizing |
+| rsi_dip_uptrend | 1.390 | 5358 | 1.140 | 1969 | 1.29 | ❌ OUT — warm OOS 1.140 < 1.15 gate |
+| bb_squeeze_breakout | 1.360 | 2917 | 1.253 | 1344 | 1.30 | ⏸ REVIEW — pending AGY battery |
+
+> **Single-stream max DD @1% risk:** donchian IS 84.9% / OOS 86.1% — but concurrency-aware peak open risk is **103%** (peak 103 simultaneous positions), which is *why* donchian is capped, not run at 1%. high52 IS 53.3% / OOS 35.9%; bb_squeeze IS 71.3% / OOS 37.0%; rsi_dip IS 75.9% / OOS 75.0%. Min robustness PF = lower of {2× slippage, worst param sweep} from Codex Task A.
 
 **ema_pullback details:**
 - Bug: `close > ema50` was mutually exclusive with `rsi(14) < 40` — fixed by AGY (now uses `close > ema200`)
@@ -70,7 +72,8 @@ All agents read and write this file directly — no human courier, no pasting. T
 - [x] ~~PRE-HARNESS (from audit): fix runner + regenerate~~ — **DONE by Codex** (warm-start OOS, missing-cache guard, slippage_mult in contract, inf auto-pass fix, aliases, full strict regeneration). Superseded by round 2 below.
 - [x] ~~**PRE-HARNESS round 2 (from Grok council): clean-universe regeneration.**~~ **DONE + Claude-verified + AGY-verified (2026-06-13).** Codex shipped Task A (universe scrub, price-plausibility flag, max_dd seeding fix, MMC→MRSH alias confirmed correct — Yahoo reindexed Marsh & McLennan) + Task B (portfolio concurrency view). Claude verified all 16 numbers match disk, 275 tests green. AGY independent battery (donchian+high52): recompute matches, no lookahead, ledgers clean, high52 not penny-stock-dependent (5.68% of R). Clean numbers: donchian IS 1.559/5272 OOS 1.287/1967 PASS; high52 1.476/2051 OOS 1.210/679 PASS; bb_squeeze 1.360/2917 OOS 1.253/1344 PASS (newly); rsi_dip 1.390/5358 OOS 1.140/1969 FAIL. **Headline sizing input: donchian OOS peak concurrency 103 = 103% open risk @1%/trade.**
 - [x] ~~**GO re-ratification (Austin decision, after round 2)**~~ — **DONE (2026-06-13).** high52 GO; donchian GO capped at 0.25% risk / max 25 positions; bb_squeeze stays REVIEW pending AGY battery; both discounts recorded. See GO DECISION table above.
-- [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/).
+- [ ] **Gate provenance note:** document where the 1.3 / 1.15 / n≥500 thresholds came from and whether they predate seeing OOS results (council red-team's hardest question; one paragraph in contracts/ or docs/). Trace origin in `docs/superpowers/plans/2026-06-12-two-track-stock-research.md`.
+- [ ] **Methodology backlog (design only, not blocking the harness):** (a) multiple-testing correction across the 12-strategy sweep — pick a method (Bonferroni floor vs White's Reality Check / SPA vs deflated Sharpe) and write down what the corrected bar would be; (b) walk-forward / rolling-window validation to replace the single IS→OOS split (high52 has zero 2022 OOS trades — one window can't sample the bear). Deliverable is a methodology note, not code. Feeds future gate revisions, not the paper-trade GO.
 - [ ] **Build paper-trade harness** for donchian + high52 — **NOW UNBLOCKED** (round 2 regeneration + concurrency number both exist). Position sizing (donchian needs ≤0.5% risk AND a concurrency cap — 103 simultaneous positions at 1% = 103% open risk), result-contract wiring, monitoring. Design notes from council: ledger = **SQLite from day one** (signals/trades/runs tables, not flat files); include an inert sentiment/catalyst annotation field per signal (passive logging now → backtestable dataset later; never an input to sizing or entries). Gated only on GO re-ratification below.
 - [ ] README.md — post-harness, deliberately deferred (Grok wanted it near-blocking; council demoted: audience is hypothetical, harness is concrete).
 - [x] ~~Codex task: verify ema_pullback params wired~~ — RESOLVED by Claude: wired correctly, but conditions inert (see details). Now a strategy-design decision, not a wiring fix.
@@ -103,7 +106,13 @@ All agents read and write this file directly — no human courier, no pasting. T
 - Completed `ema_pullback` → `rsi_dip_uptrend` rework: renamed strategy/test/results, removed dead `ema_fast`/`ema_mid` params, implemented canonical RSI-dip rule, rewrote non-vacuous tests, updated spec docs/report/dashboard, regenerated IS/OOS/robustness outputs
 
 ### Open
-- (None)
+- [ ] **Paper-trade harness implementation — STANDBY, DO NOT START.** Blocked on Claude+Austin locking the harness design (in-session this round). Full spec + file layout will land in this section once the design doc is committed. Pre-committed constraints so you have context (these are decided, not open for redesign):
+  - **SQLite ledger from day one** — `signals` / `trades` / `runs` tables, not flat files.
+  - **Sizing engine enforces donchian's cap:** start **0.25% risk/trade, max 25 concurrent open positions** (~6.25% open-risk ceiling). 0.5% risk / max-20 is a *later* test, NOT the start. high52 runs standard sizing.
+  - **Inert sentiment/catalyst annotation field** per signal — passive logging only, builds a future backtestable dataset; it is **never** an input to sizing or entries.
+  - **Descriptive/prescriptive wall:** the engine stays purely descriptive; the harness/rules layer owns ALL live risk policy (sizing, caps, regime gating). Don't push risk policy down into the strategies.
+  - Wire results through the existing result-contract; reuse `scripts/portfolio_view.py`'s concurrency accounting for the cap enforcement.
+- [ ] **DEFERRED (low priority, not blocking):** xsec_momentum off-by-one momentum index + Monday-holiday rebalance fallback fix; levered_etf_meanrev longer-IS-window re-evaluation. Only if/when those strategies are revisited — neither is on the GO path.
 
 ### Task A: Grok-council remediation (universe scrub + fixes + regeneration)
 
@@ -217,6 +226,40 @@ Build a standalone HTML file that visualizes all 12 strategy backtest results. N
 
 ### Open
 - [x] **Independent verification battery** (donchian + high52) — **DONE**. See docs/REPORT_AGY_verification.md.
+- [ ] **bb_squeeze_breakout verification battery** (replay the donchian/high52 battery) — see Task block below.
+- [ ] **Artifact triage** (gitignore + commit the real work products) — see Task block below.
+
+### Task: bb_squeeze_breakout verification battery (READ-ONLY recompute) + artifact triage
+
+Two independent parts. Use `.venv/bin/python`. You are reporting facts, not making the go/no-go call (that's Claude's).
+
+**Why this matters:** `bb_squeeze_breakout` is the one strategy still in `REVIEW` on the GO table — it newly passes after the universe scrub (OOS 1.253) but **nobody has independently recomputed its headline numbers from the raw ledgers or audited its data**, the way donchian + high52 were. This battery is the gate to ratifying it (or killing it). Same standard donchian/high52 cleared.
+
+#### Part 1 — bb_squeeze battery (replay `scripts/agy_verification.py`)
+
+Extend the existing battery rather than writing a new one, so the report stays one consolidated artifact:
+1. Add `bb_squeeze_breakout` to the strategy list in `check_1_and_3_and_5()` (keep donchian + high52 — the regenerated report should contain all three).
+2. In `check_2()`, add the bb_squeeze strategy class to the causality spot-check loop (import `BbSqueezeBreakout` from `src.stockslab.strategies.bb_squeeze_breakout` — confirm the class name from the file; match the existing Donchian/High52 pattern of `generate(data)` vs `generate(data.iloc[:k])`).
+3. In `check_6()`, load and print the bb_squeeze IS/OOS JSON PF/N alongside donchian + high52.
+4. Re-run `.venv/bin/python scripts/agy_verification.py` → regenerates `docs/REPORT_AGY_verification.md`.
+
+**Checks — report PASS or the specific anomaly (with numbers) for bb_squeeze × {IS, OOS}:**
+- **(1) Recompute headline from raw ledgers:** PF three ways (dollar P&L; from `r_multiple`; JSON `pf`), plus `n`, `wr`, `avg_r` vs the JSON. **Expected on disk:** IS PF `1.3601` / n `2917`; OOS PF `1.2530` / n `1344`. Robustness already on disk: 2× slippage `1.3046`, min non-slippage `1.3077` — sanity-check these against `results/robustness_bb_squeeze_breakout.json`.
+- **(2) Causality / lookahead (critical):** `pytest tests/ -k "bb_squeeze" -q`, then the `generate(df.iloc[:k])["entry_long"] == generate(df)["entry_long"].iloc[:k]` spot-check on 3 traded symbols. Any mismatch = lookahead = flag loudly.
+- **(3) Trade-ledger sanity:** every `exit_date >= entry_date`; no duplicate `(symbol, entry_date)`; `exit_reason_counts` sums to `n`; no NaN in `entry`/`exit`/`r_multiple`.
+- **(4) Data integrity** on the symbols bb_squeeze actually trades (the battery already does this from the merged traded-symbol set — bb_squeeze's symbols will fold in automatically once it's in the strategy list). Report new anomalies, if any, beyond what donchian/high52 already surfaced.
+
+**Hard constraints:** READ-ONLY on `results/`, `src/`, `contracts/`. You may edit `scripts/agy_verification.py` (it IS the battery harness). Do NOT touch `AGENT_STATUS.md` outside your own AGY section (Claude is editing the engine + Phase D sections this session).
+
+#### Part 2 — artifact triage (mechanical git hygiene — explicit list, zero judgment)
+
+The working tree has untracked artifacts. Do exactly this — no other deletions, no judgment calls:
+- **Add to `.gitignore`:** `.hermes/` (Hermes runtime/scratch state) and `HANDOFF.md` (ephemeral per-session handoff, regenerated every session — should never be tracked).
+- **`git add` + commit** (after Part 1 updates the report): `docs/REPORT_AGY_verification.md`, `docs/REPORT_fable_audit.md`, `scripts/agy_verification.py`, `GROK_REVIEW.txt`, `GROK_REGENERATION_LANE_DRAFT.txt`, and the `.gitignore` change. (The two `GROK_*` files are the council's source/trail — preserve them in git, do not delete.)
+- **Do NOT `git add`:** `AGENT_STATUS.md` (Claude commits it separately), anything in `results/`, `data/`, `src/`, `contracts/`.
+- Suggested commit message: `chore: bb_squeeze verification battery + artifact triage (gitignore .hermes/HANDOFF; commit Grok trail + audit reports)`.
+
+**When done:** write a 3–4 line summary into this AGY section (bb_squeeze battery verdict — PASS or anomalies with numbers; what was committed/ignored), set Status to IDLE, and commit your own AGENT_STATUS edit. Claude reads your verdict and makes the bb_squeeze ratify call.
 
 ### Task: Repo hygiene (mechanical, from Grok review — run now)
 
