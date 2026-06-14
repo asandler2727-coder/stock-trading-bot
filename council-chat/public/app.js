@@ -1,5 +1,7 @@
 // Council Chat — front-end logic. Plain JS, no framework, no build step.
-const state = { config: null, sessions: [], currentId: null, sending: false };
+const state = { config: null, sessions: [], currentId: null, sending: false, drawer: null };
+const panels = {}; // pid -> panel array, so the drawer can navigate between models
+let panelSeq = 0;
 const el = (id) => document.getElementById(id);
 const messagesEl = () => el('messages');
 
@@ -74,6 +76,7 @@ async function newChat() {
 
 async function openSession(id) {
   state.currentId = id;
+  closeDrawer();
   const s = await api('/api/sessions/' + id);
   el('sessionTitle').textContent = s.title || 'New chat';
   renderSessionList();
@@ -117,15 +120,18 @@ function renderAssistant(msg) {
   const panel = msg.panel || [];
   const okCount = panel.filter((p) => p.ok).length;
 
-  const panelCards = panel
+  const pid = 'p' + ++panelSeq;
+  panels[pid] = panel;
+
+  const rows = panel
     .map(
-      (p) => `
-      <div class="panel-card ${p.ok ? '' : 'err'}" style="--c:${p.color || '#888'}">
-        <div class="panel-head"><span class="panel-dot"></span>${escapeHtml(p.label)}
-          <span class="panel-ms">${p.ms ? (Math.round(p.ms / 100) / 10) + 's' : ''}</span></div>
-        <div class="panel-body markdown">${
-          p.ok ? (p.html || '') : `<span class="panel-error">${escapeHtml(p.error || 'No answer')}</span>`
-        }</div>
+      (p, i) => `
+      <div class="panel-row ${p.ok ? '' : 'err'}" data-pid="${pid}" data-idx="${i}">
+        <span class="panel-dot" style="--c:${p.color || '#888'}"></span>
+        <span class="panel-row-name">${escapeHtml(p.label)}</span>
+        <span class="panel-row-status">${p.ok ? 'Answered' : 'Error'}</span>
+        <span class="panel-row-ms">${p.ms ? (Math.round(p.ms / 100) / 10) + 's' : ''}</span>
+        <span class="panel-row-chev">›</span>
       </div>`
     )
     .join('');
@@ -135,11 +141,56 @@ function renderAssistant(msg) {
       <div class="synthesis-head"><span class="syn-dot"></span> Council answer <span class="syn-by">${by}</span></div>
       <div class="syn-body markdown">${msg.synthesis ? msg.synthesis.html || escapeHtml(msg.synthesis.content || '') : ''}</div>
     </div>
-    <details class="panel-details">
-      <summary>Council details — ${okCount}/${panel.length} models answered</summary>
-      <div class="panel-grid">${panelCards}</div>
-    </details>`;
+    <div class="panel-list">
+      <div class="panel-label-row">Council · ${okCount}/${panel.length} answered — click a model to read its full response</div>
+      ${rows}
+    </div>`;
+
+  wrap.querySelectorAll('.panel-row').forEach((row) => {
+    row.onclick = () => openDrawer(row.dataset.pid, Number(row.dataset.idx));
+  });
   return wrap;
+}
+
+function renderDrawer() {
+  const d = state.drawer;
+  const panel = d && panels[d.pid];
+  if (!panel) return closeDrawer();
+  const p = panel[d.idx];
+  el('drawerTitle').textContent = p.label;
+  el('drawerDot').style.background = p.color || '#888';
+  el('drawerCount').textContent = `${d.idx + 1}/${panel.length}`;
+  el('drawerMs').textContent = p.ms ? (Math.round(p.ms / 100) / 10) + 's' : '';
+  el('drawerBody').innerHTML = p.ok
+    ? (p.html || '<em>No content.</em>')
+    : `<div class="panel-error">${escapeHtml(p.error || 'No answer')}</div>`;
+  el('drawerBody').scrollTop = 0;
+  el('drawer').classList.add('open');
+  el('drawer').setAttribute('aria-hidden', 'false');
+  el('drawerScrim').classList.add('open');
+}
+
+function openDrawer(pid, idx) {
+  state.drawer = { pid, idx };
+  renderDrawer();
+}
+
+function closeDrawer() {
+  state.drawer = null;
+  el('drawer').classList.remove('open');
+  el('drawer').setAttribute('aria-hidden', 'true');
+  el('drawerScrim').classList.remove('open');
+}
+
+function drawerStep(delta) {
+  if (!state.drawer) return;
+  const panel = panels[state.drawer.pid];
+  if (!panel) return;
+  let i = state.drawer.idx + delta;
+  if (i < 0) i = panel.length - 1;
+  if (i >= panel.length) i = 0;
+  state.drawer.idx = i;
+  renderDrawer();
 }
 
 function deliberatingNode() {
@@ -202,6 +253,11 @@ function autosize() {
 function init() {
   el('newChat').onclick = newChat;
   el('send').onclick = send;
+  el('drawerClose').onclick = closeDrawer;
+  el('drawerScrim').onclick = closeDrawer;
+  el('drawerPrev').onclick = () => drawerStep(-1);
+  el('drawerNext').onclick = () => drawerStep(1);
+
   const input = el('input');
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
@@ -210,6 +266,13 @@ function init() {
       send();
     }
   });
+  document.addEventListener('keydown', (e) => {
+    if (!state.drawer) return;
+    if (e.key === 'Escape') closeDrawer();
+    else if (e.key === 'ArrowLeft') drawerStep(-1);
+    else if (e.key === 'ArrowRight') drawerStep(1);
+  });
+
   loadConfig();
   loadSessions();
 }

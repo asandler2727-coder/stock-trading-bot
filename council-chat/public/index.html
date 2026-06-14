@@ -48,6 +48,21 @@
       </main>
     </div>
 
+    <!-- Fusion-style model drawer: click a council member to read its full answer -->
+    <div id="drawerScrim" class="drawer-scrim"></div>
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <button id="drawerPrev" class="drawer-nav" title="Previous model (←)">‹</button>
+        <button id="drawerNext" class="drawer-nav" title="Next model (→)">›</button>
+        <span id="drawerDot" class="drawer-dot"></span>
+        <span id="drawerTitle" class="drawer-title"></span>
+        <span id="drawerCount" class="drawer-count"></span>
+        <span id="drawerMs" class="drawer-ms"></span>
+        <button id="drawerClose" class="drawer-close" title="Close (Esc)">×</button>
+      </div>
+      <div id="drawerBody" class="drawer-body markdown"></div>
+    </aside>
+
     <script src="/app.js"></script>
   </body>
 </html>
