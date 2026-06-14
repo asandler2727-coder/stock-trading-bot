@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Council</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">⛬</div>
+          <div class="brand-text">Council</div>
+        </div>
+        <button id="newChat" class="new-chat">
+          <span class="plus">+</span> New chat
+        </button>
+        <div id="sessionList" class="session-list"></div>
+        <div class="sidebar-foot">
+          <div class="panel-label">Panel</div>
+          <div id="panelBadges" class="panel-badges"></div>
+          <div id="modeBadge" class="mode-badge"></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div id="sessionTitle" class="session-title">New chat</div>
+        </header>
+
+        <div id="messages" class="messages">
+          <div class="empty-state">
+            <div class="empty-mark">⛬</div>
+            <h1>Ask the council</h1>
+            <p>Your question goes to every model at once. They answer in parallel, then one synthesizes the single best reply.</p>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer-inner">
+            <textarea id="input" placeholder="Ask the council anything…" rows="1"></textarea>
+            <button id="send" class="send" title="Send (Enter)">↑</button>
+          </div>
+          <div class="composer-hint">Enter to send · Shift + Enter for a new line</div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

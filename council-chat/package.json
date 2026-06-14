@@ -1,0 +1,15 @@
+{
+  "name": "council-chat",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A local council chat: fans your question out to Claude, ChatGPT, Gemini, and Grok via their subscription CLIs, then synthesizes one best answer.",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "COUNCIL_MOCK=1 node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "marked": "^12.0.0"
+  }
+}
