@@ -28,6 +28,7 @@
       <main class="main">
         <header class="topbar">
           <div id="sessionTitle" class="session-title">New chat</div>
+          <button id="openSettings" class="settings-btn" title="Council settings">⚙</button>
         </header>
 
         <div id="messages" class="messages">
@@ -46,6 +47,30 @@
           <div class="composer-hint">Enter to send · Shift + Enter for a new line</div>
         </div>
       </main>
+    </div>
+
+    <!-- Settings modal: toggle agents, pick the synthesizer, set model + effort -->
+    <div id="settingsScrim" class="modal-scrim"></div>
+    <div id="settingsModal" class="modal" aria-hidden="true">
+      <div class="modal-head">
+        <span class="modal-title">Council settings</span>
+        <button id="settingsClose" class="modal-close" title="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section-label">Agents</div>
+        <div class="settings-cols">
+          <span>On</span><span>Model</span><span>Effort</span>
+        </div>
+        <div id="settingsAgents" class="settings-agents"></div>
+
+        <div class="settings-section-label">Synthesizer</div>
+        <select id="settingsSynth" class="settings-select"></select>
+        <p class="settings-hint">The synthesizer merges every answer into the final reply. Gemini's free tier keeps this off your Claude usage.</p>
+      </div>
+      <div class="modal-foot">
+        <button id="settingsCancel" class="btn-ghost">Cancel</button>
+        <button id="settingsSave" class="btn-primary">Save changes</button>
+      </div>
     </div>
 
     <!-- Fusion-style model drawer: click a council member to read its full answer -->

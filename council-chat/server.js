@@ -25,8 +25,18 @@ function renderMarkdown(md) {
     .replace(/\son\w+\s*=\s*'[^']*'/gi, '');
 }
 
+const CONFIG_PATH = path.join(__dirname, 'council.config.json');
+
+async function readRawConfig() {
+  return JSON.parse(await fs.readFile(CONFIG_PATH, 'utf8'));
+}
+
+async function writeConfig(cfg) {
+  await fs.writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
 async function loadConfig() {
-  const cfg = JSON.parse(await fs.readFile(path.join(__dirname, 'council.config.json'), 'utf8'));
+  const cfg = await readRawConfig();
   if (process.env.COUNCIL_MOCK === '1') cfg.mock = true;
   return cfg;
 }
@@ -42,6 +52,43 @@ app.get('/api/config', async (_req, res) => {
     synthesizerId: cfg.synthesizerId,
     models: cfg.models.filter((m) => m.enabled).map((m) => ({ id: m.id, label: m.label, color: m.color }))
   });
+});
+
+// Settings panel: read the editable config, and save changes back to the file.
+app.get('/api/settings', async (_req, res) => {
+  const cfg = await loadConfig();
+  res.json({
+    synthesizerId: cfg.synthesizerId,
+    effortOptions: cfg.effortOptions || ['', 'minimal', 'low', 'medium', 'high'],
+    mock: !!cfg.mock,
+    models: cfg.models.map((m) => ({
+      id: m.id,
+      label: m.label,
+      color: m.color,
+      enabled: !!m.enabled,
+      model: m.model || '',
+      effort: m.effort || '',
+      supportsEffort: Array.isArray(m.effortArgs) && m.effortArgs.length > 0
+    }))
+  });
+});
+
+app.post('/api/settings', async (req, res) => {
+  const body = req.body || {};
+  const cfg = await readRawConfig(); // raw, so we never persist a mock override
+  if (typeof body.synthesizerId === 'string') cfg.synthesizerId = body.synthesizerId;
+  if (Array.isArray(body.models)) {
+    const updates = Object.fromEntries(body.models.map((m) => [m.id, m]));
+    for (const m of cfg.models) {
+      const u = updates[m.id];
+      if (!u) continue;
+      if (typeof u.enabled === 'boolean') m.enabled = u.enabled;
+      if (typeof u.model === 'string') m.model = u.model.trim();
+      if (typeof u.effort === 'string') m.effort = u.effort;
+    }
+  }
+  await writeConfig(cfg);
+  res.json({ ok: true });
 });
 
 app.get('/api/sessions', async (_req, res) => {

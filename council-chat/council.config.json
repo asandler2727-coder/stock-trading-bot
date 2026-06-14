@@ -1,9 +1,10 @@
 {
-  "_comment": "Edit this file to control your council. 'enabled' turns a model on/off. 'command' is exactly what gets run, with {{PROMPT}} swapped for your question. 'synthesizerId' is which model merges the answers. If a model's command is wrong you'll see its error in the 'Council details' panel — just fix it here and refresh.",
+  "_comment": "Easiest way to edit this is the app's Settings (gear icon, top right) — toggle agents on/off, choose the synthesizer, and set each model + effort. You can also edit here directly. Each model's command is built as: bin + baseArgs + (modelFlag + model, if model is set) + (effortArgs, if effort is set) + promptArgs. {{PROMPT}} = your question; {{EFFORT}} = the effort value.",
 
   "mock": false,
   "timeoutMs": 180000,
-  "synthesizerId": "claude",
+  "synthesizerId": "gemini",
+  "effortOptions": ["", "minimal", "low", "medium", "high"],
 
   "panelInstruction": "You are one member of an advisory panel answering a user's question. Give your single best, direct answer. Be accurate, specific, and reasonably concise. Do not ask follow-up questions, do not use any tools, and do not read or modify any files — just answer the question in plain markdown.",
 
@@ -13,28 +14,52 @@
       "label": "Claude",
       "enabled": true,
       "color": "#d97757",
-      "command": ["claude", "-p", "{{PROMPT}}"]
+      "bin": "claude",
+      "baseArgs": [],
+      "modelFlag": "--model",
+      "model": "",
+      "effortArgs": [],
+      "effort": "",
+      "promptArgs": ["-p", "{{PROMPT}}"]
     },
     {
       "id": "chatgpt",
       "label": "ChatGPT",
       "enabled": true,
       "color": "#19c37d",
-      "command": ["codex", "exec", "--skip-git-repo-check", "{{PROMPT}}"]
+      "bin": "codex",
+      "baseArgs": ["exec", "--skip-git-repo-check"],
+      "modelFlag": "-m",
+      "model": "",
+      "effortArgs": ["-c", "model_reasoning_effort={{EFFORT}}"],
+      "effort": "",
+      "promptArgs": ["{{PROMPT}}"]
     },
     {
       "id": "gemini",
       "label": "Gemini",
       "enabled": true,
       "color": "#4285f4",
-      "command": ["gemini", "-p", "{{PROMPT}}"]
+      "bin": "gemini",
+      "baseArgs": [],
+      "modelFlag": "-m",
+      "model": "",
+      "effortArgs": [],
+      "effort": "",
+      "promptArgs": ["-p", "{{PROMPT}}"]
     },
     {
       "id": "grok",
       "label": "Grok",
       "enabled": true,
       "color": "#9b87f5",
-      "command": ["grok", "-p", "{{PROMPT}}"]
+      "bin": "grok",
+      "baseArgs": [],
+      "modelFlag": "--model",
+      "model": "",
+      "effortArgs": [],
+      "effort": "",
+      "promptArgs": ["-p", "{{PROMPT}}"]
     }
   ]
 }

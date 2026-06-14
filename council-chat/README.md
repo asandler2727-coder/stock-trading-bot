@@ -55,9 +55,13 @@ grok -p "say hello in one word"
 
 ---
 
-## Customizing — `council.config.json`
+## Customizing
 
-Everything is controlled by this one file. No code needed.
+**Easiest: click the ⚙ gear** (top-right of the app). You can toggle each agent on/off,
+pick which model is the **synthesizer**, and set each agent's **model** and **effort** —
+then Save. Changes apply on your next question.
+
+Everything is also editable directly in `council.config.json` if you prefer. No code needed.
 
 - **Turn a model on/off** → set `"enabled": true|false`
 - **Choose who merges the answers** → `"synthesizerId"` (default `"claude"`)

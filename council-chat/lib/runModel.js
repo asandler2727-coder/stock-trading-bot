@@ -23,6 +23,20 @@ function mockFor(id) {
   return MOCK_ANSWERS[id] || `Mock answer from ${id}.`;
 }
 
+// Assemble a model's CLI command from its config parts. Empty model/effort are
+// skipped, so the default config produces exactly `claude -p …`, `codex exec … `, etc.
+// (An explicit "command" array, if present, still wins — for full manual control.)
+export function buildCommand(model) {
+  if (Array.isArray(model.command)) return model.command;
+  const args = [model.bin, ...(model.baseArgs || [])];
+  if (model.model) args.push(model.modelFlag, model.model);
+  if (model.effort && Array.isArray(model.effortArgs) && model.effortArgs.length) {
+    for (const a of model.effortArgs) args.push(a.split('{{EFFORT}}').join(model.effort));
+  }
+  args.push(...(model.promptArgs || []));
+  return args;
+}
+
 function fillTemplate(command, prompt) {
   return command.map((part) => part.split('{{PROMPT}}').join(prompt));
 }
@@ -40,7 +54,7 @@ export async function runModel(model, prompt, { timeoutMs = 180000, mock = false
   await fs.mkdir(cwd, { recursive: true });
   const cleanup = () => fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
 
-  const [cmd, ...args] = fillTemplate(model.command, prompt);
+  const [cmd, ...args] = fillTemplate(buildCommand(model), prompt);
 
   return new Promise((resolve) => {
     let stdout = '';

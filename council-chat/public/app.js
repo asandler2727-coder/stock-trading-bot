@@ -244,6 +244,67 @@ async function send() {
   }
 }
 
+function showSettings(open) {
+  el('settingsModal').classList.toggle('open', open);
+  el('settingsScrim').classList.toggle('open', open);
+  el('settingsModal').setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+async function openSettings() {
+  const s = await api('/api/settings');
+  const wrap = el('settingsAgents');
+  wrap.innerHTML = '';
+  for (const m of s.models) {
+    const effort = m.supportsEffort
+      ? `<select class="agent-effort" data-id="${m.id}">${s.effortOptions
+          .map((o) => `<option value="${o}" ${o === m.effort ? 'selected' : ''}>${o || 'default'}</option>`)
+          .join('')}</select>`
+      : `<span class="agent-effort-na" title="This CLI has no effort setting">—</span>`;
+    const row = document.createElement('div');
+    row.className = 'settings-agent';
+    row.innerHTML = `
+      <label class="switch"><input type="checkbox" class="agent-enabled" data-id="${m.id}" ${m.enabled ? 'checked' : ''}>
+        <span class="slider" style="--c:${m.color}"></span></label>
+      <span class="agent-name"><span class="agent-pip" style="background:${m.color}"></span>${escapeHtml(m.label)}</span>
+      <input type="text" class="agent-model" data-id="${m.id}" value="${escapeHtml(m.model)}" placeholder="default" spellcheck="false">
+      ${effort}`;
+    wrap.appendChild(row);
+  }
+  el('settingsSynth').innerHTML = s.models
+    .map((m) => `<option value="${m.id}" ${m.id === s.synthesizerId ? 'selected' : ''}>${escapeHtml(m.label)}</option>`)
+    .join('');
+  showSettings(true);
+}
+
+async function saveSettings() {
+  const models = [...document.querySelectorAll('.settings-agent')].map((row) => {
+    const enabledEl = row.querySelector('.agent-enabled');
+    const modelEl = row.querySelector('.agent-model');
+    const effortEl = row.querySelector('.agent-effort');
+    return {
+      id: enabledEl.dataset.id,
+      enabled: enabledEl.checked,
+      model: modelEl.value,
+      effort: effortEl && effortEl.tagName === 'SELECT' ? effortEl.value : ''
+    };
+  });
+  const btn = el('settingsSave');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ synthesizerId: el('settingsSynth').value, models })
+    });
+    showSettings(false);
+    await loadConfig(); // refresh the panel badges with the new lineup
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save changes';
+  }
+}
+
 function autosize() {
   const t = el('input');
   t.style.height = 'auto';
@@ -258,6 +319,12 @@ function init() {
   el('drawerPrev').onclick = () => drawerStep(-1);
   el('drawerNext').onclick = () => drawerStep(1);
 
+  el('openSettings').onclick = openSettings;
+  el('settingsClose').onclick = () => showSettings(false);
+  el('settingsCancel').onclick = () => showSettings(false);
+  el('settingsScrim').onclick = () => showSettings(false);
+  el('settingsSave').onclick = saveSettings;
+
   const input = el('input');
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
@@ -267,6 +334,7 @@ function init() {
     }
   });
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && el('settingsModal').classList.contains('open')) return showSettings(false);
     if (!state.drawer) return;
     if (e.key === 'Escape') closeDrawer();
     else if (e.key === 'ArrowLeft') drawerStep(-1);
