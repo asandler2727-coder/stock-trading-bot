@@ -20,7 +20,7 @@
       "label": "ChatGPT",
       "enabled": true,
       "color": "#19c37d",
-      "command": ["codex", "exec", "{{PROMPT}}"]
+      "command": ["codex", "exec", "--skip-git-repo-check", "{{PROMPT}}"]
     },
     {
       "id": "gemini",

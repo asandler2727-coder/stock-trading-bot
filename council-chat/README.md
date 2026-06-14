@@ -45,7 +45,8 @@ To confirm a CLI works on its own, try its one-shot mode, e.g.:
 ```bash
 claude -p "say hello in one word"
 gemini -p "say hello in one word"
-codex exec "say hello in one word"
+codex exec --skip-git-repo-check "say hello in one word"
+grok -p "say hello in one word"
 ```
 
 > CLI flags occasionally change between versions. If a model errors in the app, that's
@@ -63,7 +64,7 @@ Everything is controlled by this one file. No code needed.
 - **Fix or pin a model's command** → edit its `"command"`. `{{PROMPT}}` is replaced with
   your question. To pin a specific model, add its flag, e.g.
   `["claude", "--model", "claude-opus-4-8", "-p", "{{PROMPT}}"]`
-  or `["codex", "exec", "-m", "gpt-5.5", "{{PROMPT}}"]`.
+  or `["codex", "exec", "--skip-git-repo-check", "-m", "gpt-5.5", "{{PROMPT}}"]`.
 - **Timeout** → `"timeoutMs"` (default 180000 = 3 min per model)
 
 After editing, just refresh the page — changes are picked up on the next question.
